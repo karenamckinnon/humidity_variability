@@ -8,7 +8,8 @@ import numpy as np
 import os
 from helpful_utilities import download_gsod, meteo
 
-start_year = 1948
+
+start_year = 1973
 end_year = 2017
 search_query = {'ctry': "'US'",
                 'begin': 'datetime(%i, 1, 1)' % start_year,
@@ -35,8 +36,8 @@ for station in metadata['station_id']:
         print(metadata[metadata['station_id'] == station])
 
         df = download_gsod.get_data(station=station,
-                                    start=1948,
-                                    end=2015)
+                                    start=start_year,
+                                    end=end_year)
 
         if df.empty:
             continue
