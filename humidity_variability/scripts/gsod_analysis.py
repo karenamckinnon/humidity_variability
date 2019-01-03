@@ -4,17 +4,18 @@ Script to download and save GSOD data under certain parameters.
 TODO: add command line args
 """
 
-import numpy as np
 import os
 from helpful_utilities import download_gsod, meteo
+import ctypes
 
 
 start_year = 1973
 end_year = 2017
-search_query = {'ctry': "'US'",
-                'begin': 'datetime(%i, 1, 1)' % start_year,
+search_query = {'begin': 'datetime(%i, 1, 1)' % start_year,
                 'end': 'datetime(%i, 12, 31)' % end_year}
-query_hash = str(np.abs(int(hash(tuple(search_query)))))
+
+hashable = tuple((tuple(search_query.keys()), tuple(search_query.values())))
+query_hash = str(ctypes.c_size_t(hash(hashable)).value)  # ensures positive value
 savedir = '/home/mckinnon/bucket/gsod/'
 
 metadata = download_gsod.station_search(search_query)
