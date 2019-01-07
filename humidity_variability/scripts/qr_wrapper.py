@@ -31,17 +31,28 @@ np.random.seed(123)
 metadata = pd.read_csv('%s%s/metadata.csv' % (datadir, query_hash))
 
 for idx, row in metadata.iterrows():
-    print('%i/%i' % (idx, len(metadata)))
 
     station_choose = row['station_id']
 
-    df = pd.read_csv('%s%s/%s.csv' % (datadir, query_hash, station_choose))
+    print('%i/%i: %s' % (idx, len(metadata), station_choose))
+    # check if we've already made the output file
+    final_savename = '%s%s_qr.csv' % (qr_dir, station_choose)
+    if os.path.isfile(final_savename):
+        continue
+
+    try:
+        df = pd.read_csv('%s%s/%s.csv' % (datadir, query_hash, station_choose))
+    except FileNotFoundError:
+        continue
 
     # Drop missing data
     df = df[~np.isnan(df['dewp'])]
 
     # Drop places where four or less obs were used for average
     df = df[~((df['temp_c'] <= 4) | (df['dewp_c'] <= 4))]
+
+    if len(df) == 0:  # if empty after removing missing items
+        continue
 
     # Add additional date columns
     df = add_date_columns(df)
@@ -98,5 +109,4 @@ for idx, row in metadata.iterrows():
     qr_results = qr_results.set_index('station_id')
 
     # Save to csv
-    final_savename = '%s%s_qr.csv' % (qr_dir, station_choose)
     qr_results.to_csv(final_savename)
