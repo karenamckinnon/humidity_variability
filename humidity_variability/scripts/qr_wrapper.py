@@ -27,6 +27,9 @@ offset = 0
 # number of days for peak season
 window_length = 60
 
+# variable to analyze
+var_qr = 'dewp_j'
+
 np.random.seed(123)
 metadata = pd.read_csv('%s%s/metadata.csv' % (datadir, query_hash))
 
@@ -36,7 +39,7 @@ for idx, row in metadata.iterrows():
 
     print('%i/%i: %s' % (idx, len(metadata), station_choose))
     # check if we've already made the output file
-    final_savename = '%s%s_qr.csv' % (qr_dir, station_choose)
+    final_savename = '%s%s_%s_qr.csv' % (qr_dir, station_choose, var_qr)
     if os.path.isfile(final_savename):
         continue
 
@@ -93,7 +96,7 @@ for idx, row in metadata.iterrows():
     df_use.to_csv('%s%s_toR.csv' % (tmp_data_dir, station_choose))
 
     r_qr_fn = '/home/mckinnon/projects/humidity_variability/humidity_variability/tools/run_qr.R'
-    cmd = 'Rscript %s -f %s%s_toR.csv -x year_centered -y dewp_j' % (r_qr_fn, tmp_data_dir, station_choose)
+    cmd = 'Rscript %s -f %s%s_toR.csv -x year_centered -y %s' % (r_qr_fn, tmp_data_dir, station_choose, var_qr)
     check_call(cmd.split())
 
     # delete original csv
