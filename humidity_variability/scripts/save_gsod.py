@@ -18,6 +18,8 @@ hashable = tuple((tuple(search_query.keys()), tuple(search_query.values())))
 query_hash = str(ctypes.c_size_t(hash(hashable)).value)  # ensures positive value
 savedir = '/home/mckinnon/bucket/gsod/'
 
+print(query_hash)
+
 metadata = download_gsod.station_search(search_query)
 print('Found %i records' % int(len(metadata)))
 
