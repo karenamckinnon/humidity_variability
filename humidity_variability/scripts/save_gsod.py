@@ -46,6 +46,7 @@ for station in metadata['station_id']:
                 df = download_gsod.get_data(station=station,
                                             start=start_year,
                                             end=end_year)
+                break
             except Exception as e:
                 print('Try %i to download, error: %s, %s' % (this_try, e.message, e.args))
                 this_try += 1
