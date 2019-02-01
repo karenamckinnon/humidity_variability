@@ -48,7 +48,7 @@ for station in metadata['station_id']:
                                             end=end_year)
                 break
             except Exception as e:
-                print('Try %i to download, error: %s, %s' % (this_try, e.message, e.args))
+                print('Try %i to download, error: %s' % (this_try, e.args))
                 this_try += 1
         else:
             continue
@@ -71,7 +71,7 @@ for station in metadata['station_id']:
             try:
                 df.to_csv(data_savename)
             except Exception as e:
-                print('Try %i to save, error: %s, %s' % (this_try, e.message, e.args))
+                print('Try %i to save, error: %s' % (this_try, e.args))
                 this_try += 1
         else:
             continue
