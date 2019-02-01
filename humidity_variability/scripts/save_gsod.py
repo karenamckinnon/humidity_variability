@@ -10,9 +10,11 @@ import ctypes
 
 
 start_year = 1973
-end_year = 2017
+end_year = 2018
 search_query = {'begin': 'datetime(%i, 1, 1)' % start_year,
                 'end': 'datetime(%i, 12, 31)' % end_year}
+
+n_tries = 5  # Number of times to try (1) download and (2) save
 
 hashable = tuple((tuple(search_query.keys()), tuple(search_query.values())))
 query_hash = str(ctypes.c_size_t(hash(hashable)).value)  # ensures positive value
@@ -38,9 +40,17 @@ for station in metadata['station_id']:
     if not os.path.isfile(data_savename):
         print(metadata[metadata['station_id'] == station])
 
-        df = download_gsod.get_data(station=station,
-                                    start=start_year,
-                                    end=end_year)
+        this_try = 0
+        while this_try < n_tries:
+            try:
+                df = download_gsod.get_data(station=station,
+                                            start=start_year,
+                                            end=end_year)
+            except Exception as e:
+                print('Try %i to download, error: %s, %s' % (this_try, e.message, e.args))
+                this_try += 1
+        else:
+            continue
 
         if df.empty:
             continue
@@ -54,4 +64,13 @@ for station in metadata['station_id']:
         # Drop columns we're not going to use
         df = df.drop(['visib', 'visib_c', 'gust', 'f', 'r', 's', 'h', 'th', 'tr'], axis=1)
 
-        df.to_csv(data_savename)
+        # Allow for re-tries
+        this_try = 0
+        while this_try < n_tries:
+            try:
+                df.to_csv(data_savename)
+            except Exception as e:
+                print('Try %i to save, error: %s, %s' % (this_try, e.message, e.args))
+                this_try += 1
+        else:
+            continue
