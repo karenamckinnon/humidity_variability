@@ -70,6 +70,7 @@ for station in metadata['station_id']:
         while this_try < n_tries:
             try:
                 df.to_csv(data_savename)
+                break
             except Exception as e:
                 print('Try %i to save, error: %s' % (this_try, e.args))
                 this_try += 1
