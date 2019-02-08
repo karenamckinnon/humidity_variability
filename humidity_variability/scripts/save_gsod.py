@@ -34,7 +34,9 @@ meta_savename = '%s%s/metadata.csv' % (savedir, query_hash)
 if not os.path.isfile(meta_savename):
     metadata.to_csv(meta_savename)
 
-for station in metadata['station_id']:
+for row in metadata.iterrows():
+
+    station = row[1]['station_id']
 
     data_savename = '%s%s/%s.csv' % (savedir, query_hash, station)
     if not os.path.isfile(data_savename):
