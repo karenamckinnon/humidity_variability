@@ -3,17 +3,18 @@ import pandas as pd
 import os
 from humidity_variability.utils import jitter, add_date_columns, data_check, get_peak_window
 from subprocess import check_call
-
+import ctypes
 
 # Parameters
 # TODO: convert to command line args
-# TODO: fix with new hashing post-gov shutdown :( :(
+
 start_year = 1973
-end_year = 2017
-search_query = {'ctry': "'US'",
-                'begin': 'datetime(%i, 1, 1)' % start_year,
+end_year = 2018
+search_query = {'begin': 'datetime(%i, 1, 1)' % start_year,
                 'end': 'datetime(%i, 12, 31)' % end_year}
-query_hash = str(np.abs(int(hash(tuple(search_query)))))
+
+hashable = tuple((tuple(search_query.keys()), tuple(search_query.values())))
+query_hash = str(ctypes.c_size_t(hash(hashable)).value)  # ensures positive value
 datadir = '/home/mckinnon/bucket/gsod/'
 
 qr_dir = '%s%s/qr/' % (datadir, query_hash)
@@ -21,6 +22,7 @@ if not os.path.isdir(qr_dir):
     os.mkdir(qr_dir)
 
 # for jitter
+# All station data originally in tenths of deg F
 spread = 5/90
 offset = 0
 
@@ -51,8 +53,8 @@ for idx, row in metadata.iterrows():
     # Drop missing data
     df = df[~np.isnan(df['dewp'])]
 
-    # Drop places where four or less obs were used for average
-    df = df[~((df['temp_c'] <= 4) | (df['dewp_c'] <= 4))]
+    # Drop places where less than four obs were used for average
+    df = df[~((df['temp_c'] < 4) | (df['dewp_c'] < 4))]
 
     if len(df) == 0:  # if empty after removing missing items
         continue
