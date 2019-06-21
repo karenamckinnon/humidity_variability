@@ -2,11 +2,8 @@ import numpy as np
 import pandas as pd
 import os
 from humidity_variability.utils import jitter, add_date_columns, data_check, get_peak_window
-from subprocess import check_call
 import ctypes
-
-# Parameters
-# TODO: convert to command line args
+from numpy.linalg import multi_dot
 
 start_year = 1973
 end_year = 2018
@@ -17,7 +14,7 @@ hashable = tuple((tuple(search_query.keys()), tuple(search_query.values())))
 query_hash = str(ctypes.c_size_t(hash(hashable)).value)  # ensures positive value
 datadir = '/home/mckinnon/bucket/gsod/'
 
-qr_dir = '%s%s/qr/' % (datadir, query_hash)
+qr_dir = '%s%s/qr2/' % (datadir, query_hash)
 if not os.path.isdir(qr_dir):
     os.mkdir(qr_dir)
 
@@ -29,27 +26,20 @@ offset = 0
 # number of days for peak season
 window_length = 60
 
-# variable to analyze
-var_qr = 'dewp_j'
-
 np.random.seed(123)
 metadata = pd.read_csv('%s%s/metadata.csv' % (datadir, query_hash))
+
+df_ols = pd.DataFrame(columns=list(('station_id', 'OLS_slope')))
 
 for idx, row in metadata.iterrows():
 
     station_choose = row['station_id']
 
     print('%i/%i: %s' % (idx, len(metadata), station_choose))
-    if idx < 3417:
-        continue
-    # check if we've already made the output file
-    final_savename = '%s%s_%s_qr.csv' % (qr_dir, station_choose, var_qr)
-    if os.path.isfile(final_savename):
-        continue
 
     try:
         df = pd.read_csv('%s%s/%s.csv' % (datadir, query_hash, station_choose))
-    except FileNotFoundError:
+    except:
         continue
 
     # Drop missing data
@@ -95,25 +85,15 @@ for idx, row in metadata.iterrows():
     middle_year = (start_year + end_year)/2
     df_use['year_centered'] = df_use['year'] - middle_year
 
-    # Save to csv for passing to R
-    tmp_data_dir = '/home/mckinnon/projects/humidity_variability/humidity_variability/data/'
-    df_use.to_csv('%s%s_toR.csv' % (tmp_data_dir, station_choose))
+    # Center temperature on middle
+    middle_temp = np.mean(df_use['temp_j'])
+    df_use = df_use.assign(temp_anom=df_use['temp_j']-middle_temp)
 
-    r_qr_fn = '/home/mckinnon/projects/humidity_variability/humidity_variability/tools/run_qr.R'
-    cmd = 'Rscript %s -f %s%s_toR.csv -x year_centered -y %s' % (r_qr_fn, tmp_data_dir, station_choose, var_qr)
-    check_call(cmd.split())
+    X = np.matrix(df_use['year_centered']).T
+    y = np.matrix(df_use['temp_j'].values).T
+    beta = np.array(multi_dot((np.dot(X.T, X).I, X.T, y)))[0][0]
 
-    # delete original csv
-    cmd = 'rm -f %s%s_toR.csv' % (tmp_data_dir, station_choose)
-    check_call(cmd.split())
+    df_ols = df_ols.append(pd.DataFrame([[station_choose, beta]], columns=df_ols.columns))
 
-    qr_results = pd.read_csv('%s%s_QR.csv' % (tmp_data_dir, station_choose))
-
-    # delete R based csv
-    cmd = 'rm -f %s%s_QR.csv' % (tmp_data_dir, station_choose)
-    # clean up
-    qr_results = qr_results.drop(columns=['Unnamed: 0'])
-    qr_results = qr_results.set_index('station_id')
-
-    # Save to csv
-    qr_results.to_csv(final_savename)
+# Save to csv
+df_ols.to_csv('/home/mckinnon/projects/humidity_variability/humidity_variability/data/temp_ols.csv')
