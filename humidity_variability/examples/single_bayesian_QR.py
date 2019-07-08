@@ -153,7 +153,7 @@ def main(this_q):
             total_count += 1
 
     accept_ratio = accept_count/total_count
-    print('%0.2f percent of samples were accepted' % accept_ratio*100)
+    print('%0.2f percent of samples were accepted' % (accept_ratio*100))
 
     # Make and save a plot
     fig, ax = plt.subplots(figsize=(15, 10), nrows=2, ncols=2)
