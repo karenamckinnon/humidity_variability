@@ -43,7 +43,7 @@ def log_AL(data, mu, sigma, p):
     return loglike
 
 
-def log_posterior(beta, data, mu, p, beta_OLS, sigma_prior):
+def log_posterior(beta, data, x, p, beta_OLS, sigma_prior):
     """Calculate the log posterior.
 
     Assumes that the parameter associated with the AL scale is last in the parameter vector!
@@ -54,13 +54,16 @@ def log_posterior(beta, data, mu, p, beta_OLS, sigma_prior):
         Parameter vector
     data : numpy.ndarray
         Series of observations to be fit
-    mu : numpy.ndarray
-        Estimate of conditional quantile values. Same size as data.
+    x : numpy.ndarray
+        Covariates
     p : float
         Desired quantile, p \in (0, 1)
     beta_OLS : numpy.ndarray
 
     """
+
+    mu = get_mu(beta, x)
+
     log_like = log_AL(data, mu, beta[-1], p)
 
     log_post = log_like
@@ -79,6 +82,10 @@ def prior_normal(beta, loc, scale):
 
 def proposed_dist(x, delta):
     return x + delta*np.random.randn()
+
+
+def get_mu(beta, x):
+    return beta[0] + beta[1]*x
 
 
 def main(this_q):
@@ -104,8 +111,8 @@ def main(this_q):
     # Set up proposal distribution parameters
     delta = 0.1
 
-    N = 1000  # number of (accepted) samples we want
-    burnin = 100  # discard as burn-in
+    N = 5000  # number of (accepted) samples we want
+    burnin = 500  # discard as burn-in
     nparams = 3
 
     beta = np.zeros((nparams, ))
@@ -173,15 +180,14 @@ def main(this_q):
 
     ax[nparams].plot(x, line_opts[:, ::10], lw=0.5, c='gray')
     ax[nparams].plot(x, line_opts[:, 0], lw=0.5, c='gray', label='Samples')
-    ax[nparams].plot(x, beta0_mean + beta1_mean*x, 'r', lw=2, label='Mean')
+    ax[nparams].plot(x, beta0_mean + beta1_mean*x, 'r', lw=2, label='Mean (q=%0.2f)' % this_q)
 
     ax[nparams].set_xlabel('x', fontsize=14)
     ax[nparams].set_ylabel('y', fontsize=14)
     ax[nparams].axes.tick_params(labelsize=12)
 
     ax[nparams].legend()
-
-    plt.show()
+    plt.savefig('QR_example.png', dpi=200, bbox_inches='tight', orientation='landscape')
 
 
 if __name__ == '__main__':
