@@ -1,5 +1,7 @@
 import numpy as np
 from datetime import datetime
+import pandas as pd
+import observational_large_ensemble.utils as olens_utils
 
 
 def jitter(ts, offset, spread):
@@ -145,3 +147,50 @@ def get_peak_window(window_length, this_df, temperature_name, for_summer=1):
         window_use = (np.nan, np.nan)
 
     return window_use
+
+
+def add_GMT(df, lowpass_freq=1/10):
+    """Add a column to df containing the monthly global mean temperature anomaly (GMTA).
+
+    Parameters
+    ----------
+    df : pandas.dataframe
+        Dataframe containing GSOD data. Must include standard date column.
+    lowpass_freq : float
+        Frequency (1/years) to use for Butterworth lowpass filter.
+
+    Returns
+    -------
+    df : pandas.dataframe
+        Dataframe identical to input, with additional column of 'GMTA_lowpass'
+    """
+
+    # Textfile containing GMTA data
+    # Can use a different source, but will need to be loaded differently
+    GMT_fname = '/home/mckinnon/bucket/BEST/Land_and_Ocean_complete.txt'
+    gmt_data = pd.read_csv(GMT_fname, comment='%', header=None, delim_whitespace=True).loc[:, :2]
+    gmt_data.columns = ['year', 'month', 'GMTA']
+
+    # drop the second half, which infers sea ice T from water temperature
+    stop_idx = np.where(gmt_data['year'] == gmt_data['year'][0])[0][12] - 1
+    gmt_data = gmt_data.loc[:stop_idx, :]
+
+    # Perform lowpass filtering
+    gmt_smooth = olens_utils.lowpass_butter(12, lowpass_freq, 3, gmt_data['GMTA'].values)
+    gmt_data = gmt_data.assign(GMTA_lowpass=gmt_smooth)
+
+    # Match dates between df and gmt_data
+    dates1 = np.array([int(d.replace('-', '')[:6]) for d in df['date']])
+    dates2 = np.array([int('%04d%02d' % (y, d)) for y, d in zip(gmt_data['year'], gmt_data['month'])])
+    modes_idx = np.searchsorted(dates2, dates1)
+
+    # Remove dataframe rows that don't have a GMTA
+    # (Essentially the current month)
+    drop_rows = modes_idx == len(dates2)
+    df = df.loc[~drop_rows, :]
+    modes_idx = modes_idx[~drop_rows]
+
+    # Add to dataframe
+    df = df.assign(GMT=gmt_data.loc[modes_idx, 'GMTA_lowpass'].values)
+
+    return df
