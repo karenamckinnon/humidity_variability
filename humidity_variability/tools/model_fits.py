@@ -26,10 +26,12 @@ def fit_zero_knots(df_use, this_q, constraint, q=None):
     -------
     BIC : float
         The Bayesian Information Criterion
-    res: statsmodels.regression.linear_model.RegressionResultsWrapper
-        The fitted model with the best coefficients
     f : str
         The patsy string for the best fit model
+    beta : numpy.ndarray
+        Best fit coefficients
+    yhat : numpy.ndarray
+        Conditional quantile values
 
     """
     # Zero knots
@@ -48,7 +50,7 @@ def fit_zero_knots(df_use, this_q, constraint, q=None):
 
     BIC = np.log(n)*k - 2*loglike
 
-    return BIC, beta, f
+    return BIC, f, beta, yhat
 
 
 def fit_one_knot(df_use, N, this_q, BIC_prior, constraint, q=None):
@@ -79,10 +81,12 @@ def fit_one_knot(df_use, N, this_q, BIC_prior, constraint, q=None):
         The Bayesian Information Criterion
     delta_bic : float
         The change in the BIC between models
-    res: statsmodels.regression.linear_model.RegressionResultsWrapper
-        The fitted model with the best coefficients
     f : str
         The patsy string for the best fit model
+    beta : numpy.ndarray
+        Best fit coefficients
+    yhat : numpy.ndarray
+        Conditional quantile values
     """
 
     # One knot
@@ -127,7 +131,7 @@ def fit_one_knot(df_use, N, this_q, BIC_prior, constraint, q=None):
     BIC = np.log(n)*k - 2*loglike
     delta_bic = BIC - BIC_prior
 
-    return BIC, delta_bic, beta, f
+    return BIC, delta_bic, f, beta, yhat
 
 
 def fit_two_knots(df_use, N, this_q, BIC_prior, constraint, q=None):
@@ -158,10 +162,12 @@ def fit_two_knots(df_use, N, this_q, BIC_prior, constraint, q=None):
         The Bayesian Information Criterion
     delta_bic : float
         The change in the BIC between models
-    res: statsmodels.regression.linear_model.RegressionResultsWrapper
-        The fitted model with the best coefficients
     f : str
         The patsy string for the best fit model
+    beta : numpy.ndarray
+        Best fit coefficients
+    yhat : numpy.ndarray
+        Conditional quantile values
     """
 
     data_range = np.percentile(df_use['temp_j'], 5), np.percentile(df_use['temp_j'], 95)
@@ -200,7 +206,7 @@ def fit_two_knots(df_use, N, this_q, BIC_prior, constraint, q=None):
 
     delta_bic = BIC - BIC_prior
 
-    return BIC, delta_bic, beta, f
+    return BIC, delta_bic, f, beta, yhat
 
 
 def fit_three_knots(df_use, N, this_q, BIC_prior, constraint, q=None):
@@ -231,10 +237,12 @@ def fit_three_knots(df_use, N, this_q, BIC_prior, constraint, q=None):
         The Bayesian Information Criterion
     delta_bic : float
         The change in the BIC between models
-    res: statsmodels.regression.linear_model.RegressionResultsWrapper
-        The fitted model with the best coefficients
     f : str
         The patsy string for the best fit model
+    beta : numpy.ndarray
+        Best fit coefficients
+    yhat : numpy.ndarray
+        Conditional quantile values
     """
 
     data_range = np.percentile(df_use['temp_j'], 5), np.percentile(df_use['temp_j'], 95)
@@ -274,4 +282,4 @@ def fit_three_knots(df_use, N, this_q, BIC_prior, constraint, q=None):
     BIC = np.log(n)*k - 2*loglike
     delta_bic = BIC - BIC_prior
 
-    return BIC, delta_bic, beta, f
+    return BIC, delta_bic, f, beta, yhat
