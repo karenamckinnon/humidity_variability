@@ -194,3 +194,101 @@ def add_GMT(df, lowpass_freq=1/10):
     df = df.assign(GMT=gmt_data.loc[modes_idx, 'GMTA_lowpass'].values)
 
     return df
+
+
+def solve_qr(X, data, tau, constraint, q=None):
+    """Use linear programming to fit piecewise quantile regression model.
+
+    The model should be fit as the residual from the next lowest or highest quantile, starting at the median.
+    The constraint ensures no quantile crossing.
+
+    Parameters
+    ----------
+    X : patsy.DesignMatrix
+        Contains covariates for piecewise linear fit. Should include intercept (if desired)
+    data : numpy.ndarray
+        The data to be fit to
+    tau : float
+        Quantile of interest \in (0, 1)
+    constraint : str
+        Type of constraint to impose: 'None', 'Below', 'Above'.
+        'Below' indicates no crossing of lower quantile (i.e. tau = 0.55 shouldn't cross tau = 0.5)
+        'Above' indicates no crossing of upper quantile (i.e. tau = 0.45 shouldn't cross tau = 0.5)
+        'None' imposes no constraints, and should be used for estimating the median quantile.
+    q : numpy.ndarray or None
+        The fitted quantile not to be crossed (if constraint is not None)
+
+    Returns
+    -------
+    beta : numpy.ndarray
+        Parameter coefficients for quantile regression model
+    yhat : numpy.ndarray
+        Conditional values of predictand for a given quantile
+
+    """
+    import cvxopt
+
+    N, K = X.shape
+
+    # Equality constraint: Ax = b
+    # x is composed of the positive and negative values of the parameters and the positive and negative
+    # values of the residuals
+    # Constraint ensures that fitted quantile trend + residuals = predictand
+
+    A1 = cvxopt.matrix(X)  # covariates for positive values of the variable
+    A2 = cvxopt.matrix(-1*X)  # covariates for negative values of the variable
+    A3 = cvxopt.spmatrix(1, range(N), range(N))  # Positive residuals
+    A4 = cvxopt.spmatrix(-1, range(N), range(N))  # Negative residuals
+    A = cvxopt.sparse([[A1], [A2], [A3], [A4]])
+
+    b = cvxopt.matrix(data)
+
+    # Linear programming minimizes c^T x
+    # Want to minimize residuals, no constraints on the parameters
+    c = cvxopt.matrix(np.concatenate((np.repeat(0, 2*K), tau*np.repeat(1, N), (1-tau)*np.repeat(1, N))))
+
+    # Determine if we have non-crossing constraints
+    # Generally, inequality constraints written Gx <= h
+    # Always, constraint that all values of x are positive (> 0)
+    n = A.size[1]
+
+    G1 = cvxopt.spmatrix(-1, range(n), range(n))
+
+    if constraint == 'None':
+        n_constraints = 0
+        G = G1
+        del G1
+    else:
+        n_constraints = X.shape[0]
+        if constraint == 'Below':
+            G2 = cvxopt.sparse([[cvxopt.matrix(-X)],
+                                [cvxopt.matrix(X)],
+                                [cvxopt.spmatrix(0, range(N), range(N))],
+                                [cvxopt.spmatrix(0, range(N), range(N))]])
+        elif constraint == 'Above':
+            G2 = cvxopt.sparse([[cvxopt.matrix(X)],
+                                [cvxopt.matrix(-X)],
+                                [cvxopt.spmatrix(0, range(N), range(N))],
+                                [cvxopt.spmatrix(0, range(N), range(N))]])
+
+        G = cvxopt.sparse([G1, G2])
+
+    # Right hand side of inequality constraint
+    h = np.zeros((n + n_constraints, 1))
+    if constraint == 'Below':
+        h[n:] = -q
+    elif constraint == 'Above':
+        h[n:] = q
+
+    h = cvxopt.matrix(h)
+
+    # Solve the model
+    sol = cvxopt.solvers.lp(c, G, h, A, b, solver='glpk')
+
+    z = sol['x']
+
+    # Combine negative and positive components of parameters
+    beta = np.array(z[0:K] - z[K:2*K])
+    yhat = np.dot(X, beta)
+
+    return beta, yhat
