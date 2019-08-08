@@ -226,33 +226,32 @@ def solve_qr(X, data, tau, constraint, q=None):
         Conditional values of predictand for a given quantile
 
     """
-    import cvxopt
-
-    N, K = X.shape
+    import cvxpy as cp
+    from scipy import sparse
 
     # Equality constraint: Ax = b
     # x is composed of the positive and negative values of the parameters and the positive and negative
     # values of the residuals
     # Constraint ensures that fitted quantile trend + residuals = predictand
+    N, K = X.shape
 
-    A1 = cvxopt.matrix(X)  # covariates for positive values of the variable
-    A2 = cvxopt.matrix(-1*X)  # covariates for negative values of the variable
-    A3 = cvxopt.spmatrix(1, range(N), range(N))  # Positive residuals
-    A4 = cvxopt.spmatrix(-1, range(N), range(N))  # Negative residuals
-    A = cvxopt.sparse([[A1], [A2], [A3], [A4]])
+    A1 = X  # covariates for positive values of the variable
+    A2 = -1*X  # covariates for negative values of the variable
+    A3 = sparse.eye(N)  # Positive residuals
+    A4 = -1*sparse.eye(N)  # Negative residuals
+    A = sparse.hstack((A1, A2, A3, A4))
+    A = cp.Constant(A)
 
-    b = cvxopt.matrix(data)
+    b = data
 
-    # Linear programming minimizes c^T x
-    # Want to minimize residuals, no constraints on the parameters
-    c = cvxopt.matrix(np.concatenate((np.repeat(0, 2*K), tau*np.repeat(1, N), (1-tau)*np.repeat(1, N))))
+    c = np.concatenate((np.repeat(0, 2*K), tau*np.repeat(1, N), (1-tau)*np.repeat(1, N)))
 
     # Determine if we have non-crossing constraints
     # Generally, inequality constraints written Gx <= h
     # Always, constraint that all values of x are positive (> 0)
-    n = A.size[1]
+    n = A.shape[1]
 
-    G1 = cvxopt.spmatrix(-1, range(n), range(n))
+    G1 = -1*sparse.eye(n)
 
     if constraint == 'None':
         n_constraints = 0
@@ -261,34 +260,27 @@ def solve_qr(X, data, tau, constraint, q=None):
     else:
         n_constraints = X.shape[0]
         if constraint == 'Below':
-            G2 = cvxopt.sparse([[cvxopt.matrix(-X)],
-                                [cvxopt.matrix(X)],
-                                [cvxopt.spmatrix(0, range(N), range(N))],
-                                [cvxopt.spmatrix(0, range(N), range(N))]])
+            G2 = sparse.hstack((-X, X, 0*sparse.eye(N), 0*sparse.eye(N)))
         elif constraint == 'Above':
-            G2 = cvxopt.sparse([[cvxopt.matrix(X)],
-                                [cvxopt.matrix(-X)],
-                                [cvxopt.spmatrix(0, range(N), range(N))],
-                                [cvxopt.spmatrix(0, range(N), range(N))]])
+            G2 = sparse.hstack((X, -X, 0*sparse.eye(N), 0*sparse.eye(N)))
+        G = sparse.vstack((G1, G2))
 
-        G = cvxopt.sparse([G1, G2])
+    G = cp.Constant(G)
 
     # Right hand side of inequality constraint
-    h = np.zeros((n + n_constraints, 1))
+    h = np.zeros((n + n_constraints, ))
     if constraint == 'Below':
         h[n:] = -q
     elif constraint == 'Above':
         h[n:] = q
 
-    h = cvxopt.matrix(h)
+    x = cp.Variable(2*K + 2*N)
+    objective = cp.Minimize(c.T@x)
+    prob = cp.Problem(objective,
+                      [A@x == b, G@x <= h])
 
-    # Solve the model
-    sol = cvxopt.solvers.lp(c, G, h, A, b, solver='glpk')
-
-    z = sol['x']
-
-    # Combine negative and positive components of parameters
-    beta = np.array(z[0:K] - z[K:2*K])
+    prob.solve(solver=cp.MOSEK)
+    beta = np.array(x.value[0:K] - x.value[K:2*K])
     yhat = np.dot(X, beta)
 
     return beta, yhat
