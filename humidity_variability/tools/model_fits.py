@@ -85,6 +85,20 @@ def fit_one_knot(df_use, proposed_knots, this_q, BIC_prior, constraint, q=None):
     # One knot
     N = len(proposed_knots)
     loglike = np.empty((N))
+    delta_knot = proposed_knots[1] - proposed_knots[0]
+
+    for kk in range(N):
+        f = 'dewp_j ~ GMT*bs(temp_j, degree=1, df=2, knots=np.array([%0.2f]))' % proposed_knots[kk]
+        _, X = patsy.dmatrices(f, df_use, return_type='matrix')
+        beta, yhat = solve_qr(X, df_use['dewp_j'].values, this_q, constraint, q)
+        loglike[kk] = log_AL(df_use['dewp_j'].values, yhat, 1, this_q)
+
+    best_knot = proposed_knots[np.argmax(loglike)]
+
+    # Zoom in around this knot to find a better location
+    proposed_knots = np.arange(best_knot - delta_knot, best_knot + delta_knot, delta_knot/10)
+    N = len(proposed_knots)
+    loglike = np.empty((N))
 
     for kk in range(N):
         f = 'dewp_j ~ GMT*bs(temp_j, degree=1, df=2, knots=np.array([%0.2f]))' % proposed_knots[kk]
@@ -152,6 +166,22 @@ def fit_two_knots(df_use, proposed_knots, this_q, BIC_prior, constraint, q=None)
         loglike[kk] = log_AL(df_use['dewp_j'].values, yhat, 1, this_q)
 
     best_knot = proposed_knots[np.argmax(loglike), :]
+
+    # Zoom in around this knot to find a better location
+    delta_knot = proposed_knots[1, 1] - proposed_knots[0, 1]
+    proposed_knots = np.array([(best_knot[0] + delta_knot*(i/2), best_knot[1] + delta_knot*(j/2))
+                               for i in np.arange(-2, 3) for j in np.arange(-2, 3)])
+    N = len(proposed_knots)
+    loglike = np.empty((N))
+
+    for kk in range(N):
+        f = 'dewp_j ~ GMT*bs(temp_j, degree=1, df=3, knots=np.array([%0.2f, %0.2f]))' % (proposed_knots[kk, 0],
+                                                                                         proposed_knots[kk, 1])
+        _, X = patsy.dmatrices(f, df_use, return_type='matrix')
+        beta, yhat = solve_qr(X, df_use['dewp_j'].values, this_q, constraint, q)
+        loglike[kk] = log_AL(df_use['dewp_j'].values, yhat, 1, this_q)
+
+    best_knot = proposed_knots[np.argmax(loglike), :]
     f = 'dewp_j ~ GMT*bs(temp_j, degree=1, df=3, knots=np.array([%0.2f, %0.2f]))' % (best_knot[0],
                                                                                      best_knot[1])
     _, X = patsy.dmatrices(f, df_use, return_type='matrix')
@@ -203,6 +233,26 @@ def fit_three_knots(df_use, proposed_knots, this_q, BIC_prior, constraint, q=Non
     """
 
     N = np.shape(proposed_knots)[0]
+    loglike = np.empty((N))
+
+    for kk in range(N):
+        f = 'dewp_j ~ GMT*bs(temp_j, degree=1, df=4, knots=np.array([%0.2f, %0.2f, %0.2f]))' % (proposed_knots[kk, 0],
+                                                                                                proposed_knots[kk, 1],
+                                                                                                proposed_knots[kk, 2])
+        _, X = patsy.dmatrices(f, df_use, return_type='matrix')
+        beta, yhat = solve_qr(X, df_use['dewp_j'].values, this_q, constraint, q)
+        loglike[kk] = log_AL(df_use['dewp_j'].values, yhat, 1, this_q)
+
+    best_knot = proposed_knots[np.argmax(loglike), :]
+
+    # Zoom in around this knot to find a better location
+    delta_knot = proposed_knots[1, -1] - proposed_knots[0, -1]
+    proposed_knots = np.array([(best_knot[0] + delta_knot*(i/2), best_knot[1] + delta_knot*(j/2),
+                                best_knot[2] + delta_knot*(k/2))
+                               for i in np.arange(-2, 3)
+                               for j in np.arange(-2, 3)
+                               for k in np.arange(-2, 3)])
+    N = len(proposed_knots)
     loglike = np.empty((N))
 
     for kk in range(N):
