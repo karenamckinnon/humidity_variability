@@ -156,20 +156,17 @@ def fit_two_knots(df_use, proposed_knots, this_q, BIC_prior, constraint, q=None)
         Conditional quantile values
     """
 
-    N = np.shape(proposed_knots)[-1]
+    N = np.shape(proposed_knots)[0]
     loglike = np.empty((N))
 
     for kk in range(N):
-        f = 'dewp_j ~ GMT*bs(temp_j, degree=1, df=3, knots=np.array([%0.2f, %0.2f]))' % (proposed_knots[0, kk],
-                                                                                         proposed_knots[1, kk])
-        # mod = smf.quantreg(f, df_use)
-        # res = mod.fit(q=this_q, max_iter=10000)
-        # yhat = res.fittedvalues
+        f = 'dewp_j ~ GMT*bs(temp_j, degree=1, df=3, knots=np.array([%0.2f, %0.2f]))' % (proposed_knots[kk, 0],
+                                                                                         proposed_knots[kk, 1])
         _, X = patsy.dmatrices(f, df_use, return_type='matrix')
         beta, yhat = solve_qr(X, df_use['dewp_j'].values, this_q, constraint, q)
         loglike[kk] = log_AL(df_use['dewp_j'].values, yhat, 1, this_q)
 
-    best_knot = proposed_knots[:, np.argmax(loglike)]
+    best_knot = proposed_knots[np.argmax(loglike), :]
     f = 'dewp_j ~ GMT*bs(temp_j, degree=1, df=3, knots=np.array([%0.2f, %0.2f]))' % (best_knot[0],
                                                                                      best_knot[1])
     _, X = patsy.dmatrices(f, df_use, return_type='matrix')
@@ -220,20 +217,21 @@ def fit_three_knots(df_use, proposed_knots, this_q, BIC_prior, constraint, q=Non
         Conditional quantile values
     """
 
-    N = np.shape(proposed_knots)[1]
+    N = np.shape(proposed_knots)[0]
     loglike = np.empty((N))
 
     for kk in range(N):
-        f = 'dewp_j ~ GMT*bs(temp_j, degree=1, df=4, knots=np.array([%0.2f, %0.2f, %0.2f]))' % (proposed_knots[0, kk],
-                                                                                                proposed_knots[1, kk],
-                                                                                                proposed_knots[2, kk])
+        f = 'dewp_j ~ GMT*bs(temp_j, degree=1, df=4, knots=np.array([%0.2f, %0.2f, %0.2f]))' % (proposed_knots[kk, 0],
+                                                                                                proposed_knots[kk, 1],
+                                                                                                proposed_knots[kk, 2])
         _, X = patsy.dmatrices(f, df_use, return_type='matrix')
         beta, yhat = solve_qr(X, df_use['dewp_j'].values, this_q, constraint, q)
         loglike[kk] = log_AL(df_use['dewp_j'].values, yhat, 1, this_q)
 
-    best_knot = proposed_knots[:, np.argmax(loglike)]
-    f = 'dewp_j ~ GMT*bs(temp_j, degree=1, df=3, knots=np.array([%0.2f, %0.2f]))' % (best_knot[0],
-                                                                                     best_knot[1])
+    best_knot = proposed_knots[np.argmax(loglike), :]
+    f = 'dewp_j ~ GMT*bs(temp_j, degree=1, df=4, knots=np.array([%0.2f, %0.2f, %0.2f]))' % (best_knot[0],
+                                                                                            best_knot[1],
+                                                                                            best_knot[2])
     _, X = patsy.dmatrices(f, df_use, return_type='matrix')
     beta, yhat = solve_qr(X, df_use['dewp_j'].values, this_q, constraint, q)
     loglike = log_AL(df_use['dewp_j'].values, yhat, 1, this_q)
