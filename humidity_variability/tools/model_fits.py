@@ -36,33 +36,26 @@ def fit_zero_knots(df_use, this_q, constraint, q=None):
     """
     # Zero knots
     f = 'dewp_j ~ GMT*bs(temp_j, degree=1, df=1)'
-    # mod = smf.quantreg(f, df_use)
-    # res = mod.fit(q=this_q, max_iter=10000)
     _, X = patsy.dmatrices(f, df_use, return_type='matrix')
     beta, yhat = solve_qr(X, df_use['dewp_j'].values, this_q, constraint, q)
 
-    # yhat = res.fittedvalues
     loglike = log_AL(df_use['dewp_j'].values, yhat, 1, this_q)
     n = len(df_use)
     k = X.shape[1]
-    # n = res.nobs
-    # k = len(res.params)
-
     BIC = np.log(n)*k - 2*loglike
 
     return BIC, f, beta, yhat
 
 
-def fit_one_knot(df_use, N, this_q, BIC_prior, constraint, q=None):
+def fit_one_knot(df_use, proposed_knots, this_q, BIC_prior, constraint, q=None):
     """Fit QR model with a single knot.
 
     Parameters
     ----------
     df_use : pandas.DataFrame
         Contains data to be fit (columns = temp_j, dewp_j, GMT)
-    N : int
-        Number of random locations to test.
-        Note that a second loop of size N will zoom in on the best-fit locations (suggest N = 10)
+    proposed_knots : numpy.ndarray
+        Set of knots to test.
     this_q : float
         Quantile to fit
     BIC_prior : float
@@ -90,8 +83,7 @@ def fit_one_knot(df_use, N, this_q, BIC_prior, constraint, q=None):
     """
 
     # One knot
-    data_range = np.percentile(df_use['temp_j'], 2.5), np.percentile(df_use['temp_j'], 97.5)
-    proposed_knots = np.sort(data_range[0] + (data_range[1] - data_range[0])*np.random.rand(N))
+    N = len(proposed_knots)
     loglike = np.empty((N))
 
     for kk in range(N):
@@ -117,16 +109,11 @@ def fit_one_knot(df_use, N, this_q, BIC_prior, constraint, q=None):
 
     best_knot = proposed_knots[np.argmax(loglike)]
     f = 'dewp_j ~ GMT*bs(temp_j, degree=1, df=2, knots=np.array([%0.2f]))' % best_knot
-    # mod = smf.quantreg(f, df_use)
-    # res = mod.fit(q=this_q, max_iter=10000)
-    # yhat = res.fittedvalues
     _, X = patsy.dmatrices(f, df_use, return_type='matrix')
     beta, yhat = solve_qr(X, df_use['dewp_j'].values, this_q, constraint, q)
     loglike = log_AL(df_use['dewp_j'].values, yhat, 1, this_q)
     n = len(df_use)
     k = X.shape[1]
-    # n = res.nobs
-    # k = len(res.params)
 
     BIC = np.log(n)*k - 2*loglike
     delta_bic = BIC - BIC_prior
@@ -134,16 +121,15 @@ def fit_one_knot(df_use, N, this_q, BIC_prior, constraint, q=None):
     return BIC, delta_bic, f, beta, yhat
 
 
-def fit_two_knots(df_use, N, this_q, BIC_prior, constraint, q=None):
+def fit_two_knots(df_use, proposed_knots, this_q, BIC_prior, constraint, q=None):
     """Fit QR model with a single knot.
 
     Parameters
     ----------
     df_use : pandas.DataFrame
         Contains data to be fit (columns = temp_j, dewp_j, GMT)
-    N : int
-        Number of random locations to test.
-        Note that a second loop of size N will zoom in on the best-fit locations (suggest N = 100)
+    proposed_knots : numpy.ndarray
+        Set of knots to test.
     this_q : float
         Quantile to fit
     BIC_prior : float
@@ -170,13 +156,8 @@ def fit_two_knots(df_use, N, this_q, BIC_prior, constraint, q=None):
         Conditional quantile values
     """
 
-    data_range = np.percentile(df_use['temp_j'], 5), np.percentile(df_use['temp_j'], 95)
-    proposed_knots = np.vstack(((data_range[0] + (data_range[1] - data_range[0])*np.random.rand(N)),
-                                (data_range[0] + (data_range[1] - data_range[0])*np.random.rand(N))))
+    N = np.shape(proposed_knots)[-1]
     loglike = np.empty((N))
-
-    # Fix knots so that the first is always before the second
-    proposed_knots = np.sort(np.sort(proposed_knots, axis=0), axis=-1)
 
     for kk in range(N):
         f = 'dewp_j ~ GMT*bs(temp_j, degree=1, df=3, knots=np.array([%0.2f, %0.2f]))' % (proposed_knots[0, kk],
@@ -191,16 +172,11 @@ def fit_two_knots(df_use, N, this_q, BIC_prior, constraint, q=None):
     best_knot = proposed_knots[:, np.argmax(loglike)]
     f = 'dewp_j ~ GMT*bs(temp_j, degree=1, df=3, knots=np.array([%0.2f, %0.2f]))' % (best_knot[0],
                                                                                      best_knot[1])
-    # mod = smf.quantreg(f, df_use)
-    # res = mod.fit(q=this_q, max_iter=10000)
-    # yhat = res.fittedvalues
     _, X = patsy.dmatrices(f, df_use, return_type='matrix')
     beta, yhat = solve_qr(X, df_use['dewp_j'].values, this_q, constraint, q)
     loglike = log_AL(df_use['dewp_j'].values, yhat, 1, this_q)
     n = len(df_use)
     k = X.shape[1]
-    # n = res.nobs
-    # k = len(res.params)
 
     BIC = np.log(n)*k - 2*loglike
 
@@ -209,16 +185,15 @@ def fit_two_knots(df_use, N, this_q, BIC_prior, constraint, q=None):
     return BIC, delta_bic, f, beta, yhat
 
 
-def fit_three_knots(df_use, N, this_q, BIC_prior, constraint, q=None):
+def fit_three_knots(df_use, proposed_knots, this_q, BIC_prior, constraint, q=None):
     """Fit QR model with a single knot.
 
     Parameters
     ----------
     df_use : pandas.DataFrame
         Contains data to be fit (columns = temp_j, dewp_j, GMT)
-    N : int
-        Number of random locations to test.
-        Note that a second loop of size N will zoom in on the best-fit locations (suggest N = 100)
+    proposed_knots : numpy.ndarray
+        Set of knots to test.
     this_q : float
         Quantile to fit
     BIC_prior : float
@@ -245,22 +220,13 @@ def fit_three_knots(df_use, N, this_q, BIC_prior, constraint, q=None):
         Conditional quantile values
     """
 
-    data_range = np.percentile(df_use['temp_j'], 5), np.percentile(df_use['temp_j'], 95)
-    proposed_knots = np.vstack(((data_range[0] + (data_range[1] - data_range[0])*np.random.rand(N)),
-                                (data_range[0] + (data_range[1] - data_range[0])*np.random.rand(N)),
-                                (data_range[0] + (data_range[1] - data_range[0])*np.random.rand(N))))
+    N = np.shape(proposed_knots)[1]
     loglike = np.empty((N))
-
-    # Fix knots so that the first is always before the second
-    proposed_knots = np.sort(np.sort(proposed_knots, axis=0), axis=-1)
 
     for kk in range(N):
         f = 'dewp_j ~ GMT*bs(temp_j, degree=1, df=4, knots=np.array([%0.2f, %0.2f, %0.2f]))' % (proposed_knots[0, kk],
                                                                                                 proposed_knots[1, kk],
                                                                                                 proposed_knots[2, kk])
-        # mod = smf.quantreg(f, df_use)
-        # res = mod.fit(q=this_q, max_iter=10000)
-        # yhat = res.fittedvalues
         _, X = patsy.dmatrices(f, df_use, return_type='matrix')
         beta, yhat = solve_qr(X, df_use['dewp_j'].values, this_q, constraint, q)
         loglike[kk] = log_AL(df_use['dewp_j'].values, yhat, 1, this_q)
@@ -268,16 +234,11 @@ def fit_three_knots(df_use, N, this_q, BIC_prior, constraint, q=None):
     best_knot = proposed_knots[:, np.argmax(loglike)]
     f = 'dewp_j ~ GMT*bs(temp_j, degree=1, df=3, knots=np.array([%0.2f, %0.2f]))' % (best_knot[0],
                                                                                      best_knot[1])
-    # mod = smf.quantreg(f, df_use)
-    # res = mod.fit(q=this_q, max_iter=10000)
-    # yhat = res.fittedvalues
     _, X = patsy.dmatrices(f, df_use, return_type='matrix')
     beta, yhat = solve_qr(X, df_use['dewp_j'].values, this_q, constraint, q)
     loglike = log_AL(df_use['dewp_j'].values, yhat, 1, this_q)
     n = len(df_use)
     k = X.shape[1]
-    # n = res.nobs
-    # k = len(res.params)
 
     BIC = np.log(n)*k - 2*loglike
     delta_bic = BIC - BIC_prior
