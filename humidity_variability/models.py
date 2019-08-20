@@ -1,6 +1,7 @@
 import numpy as np
 import cvxpy as cp
 from scipy import sparse
+from cxvpy import SolverError
 
 
 def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lam1, lam2):
@@ -148,7 +149,15 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lam1, lam2):
     prob = cp.Problem(objective,
                       [A@z == b, G@z <= h])
 
-    prob.solve(solver=cp.ECOS)
+    try:
+        prob.solve(solver=cp.ECOS)
+    except SolverError:  # try a second solver
+        prob.solve(solver=cp.SCS)
+    except SolverError:  # give up
+        beta = np.zeros((n,))
+        yhat = q
+        return beta, yhat
+
     beta = np.array(z.value[0:K] - z.value[K:2*K])
     yhat = np.dot(X, beta)
 
