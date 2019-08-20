@@ -153,3 +153,61 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lam1, lam2):
     yhat = np.dot(X, beta)
 
     return beta, yhat
+
+
+def fit_quantiles(qs, lam1, lam2, X, data, delta):
+    """Fit all desired quantiles, ensuring non-crossing.
+
+    Parameters
+    ----------
+    qs : numpy.ndarray
+        The set of quantiles (0, 1) to be fit.
+    lam1 : float
+        The regularization parameter for the temperature-dewpoint spline
+    lam2 : float
+        The regularization parameter for the interaction term spline
+    X : numpy.ndarray
+        The design matrix
+    data : numpy.ndarray
+        The 1D variable being modeled
+    delta : numpy.ndarray
+        The dx for the regularized spline term(s)
+
+    Returns
+    -------
+    BETA : numpy.ndarray
+        The parameter vector for all quantiles. There are (2 + 2*len(data)) parameters.
+    """
+
+    # Switch quantiles to integers to ensure matching
+    qs_int = (100*qs).astype(int)
+
+    # Start with the desired quantile closest to the median
+    start_q = qs_int[np.argmin(np.abs(qs_int - 50))]
+    delta_q = qs_int - start_q
+
+    pos_q = qs_int[delta_q > 0]
+    neg_q = qs_int[delta_q < 0]
+
+    nparams = X.shape[1]
+    nq = len(qs_int)
+
+    BETA = np.empty((nparams, nq))
+
+    # Fit middle quantile
+    beta50, yhat50 = fit_regularized_spline_QR(X, data, delta, 0.5, 'None', None, lam1, lam2)
+    BETA[:, qs_int == start_q] = beta50[:, np.newaxis]
+
+    # Fit quantiles above the middle
+    yhat = yhat50
+    for this_q in pos_q:
+        beta, yhat = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Below', yhat, lam1, lam2)
+        BETA[:, qs_int == this_q] = beta[:, np.newaxis]
+
+    # Fit quantiles below the median
+    yhat = yhat50
+    for this_q in neg_q[::-1]:
+        beta, yhat = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Above', yhat, lam1, lam2)
+        BETA[:, qs_int == this_q] = beta[:, np.newaxis]
+
+    return BETA
