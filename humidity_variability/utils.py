@@ -284,3 +284,85 @@ def solve_qr(X, data, tau, constraint, q=None):
     yhat = np.dot(X, beta)
 
     return beta, yhat
+
+
+def gsod_preprocess(df, offset, spread, start_year, end_year, window_length, for_summer):
+    """Perform a number of data preprocessing/selection steps before applying model.
+
+    Parameters
+    ----------
+    df : pandas.dataframe
+        Main dataframe containing GSOD data
+    offset : float
+        Mean offset of rounded data (relevant for e.g. unit conversions)
+    spread : float
+        Spread of uniform jitter
+    start_year : int
+        First year of desired data record
+    end_year : int
+        Last year of desired data record
+    window_length : int
+        The length in days of the peak period
+    for_summer : bool
+        Indicator of whether the analysis is for the warm (summer) or cold (winter) season.
+
+    Returns
+    -------
+    df_use : pandas.dataframe
+        Simplified dataframe with jittered and normalized data
+    muT : float
+        The average temperature value for the station during the desired season
+    stdT : float
+        The standard deviation of temperature for the station during the desired season
+    window_use : tuple
+        First and last day of peak window.
+    """
+
+    # Drop missing data
+    df = df[~np.isnan(df['dewp'])]
+
+    # Drop places where less than four obs were used for average
+    df = df[~((df['temp_c'] < 4) | (df['dewp_c'] < 4))]
+
+    # Add additional date columns
+    df = add_date_columns(df)
+
+    # Drop Feb 29, and rework day of year counters
+    leaps = df.loc[(df['month'] == 2) & (df['doy'] == 60), 'year'].values
+    for ll in leaps:
+        old_doy = df.loc[(df['year'] == ll) & (df['month'] > 2), 'doy'].values
+        df.loc[(df['year'] == ll) & (df['month'] > 2), 'doy'] = old_doy - 1
+    df = df[~((df['month'] == 2) & (df['doy'] == 60))]
+
+    # Add jitter
+    df['temp_j'] = jitter(df['temp'], offset, spread)
+    df['dewp_j'] = jitter(df['dewp'], offset, spread)
+
+    window_use = get_peak_window(window_length, df, 'temp_j', for_summer=for_summer)
+
+    flag = data_check(df, window_use, start_year, end_year)
+
+    if flag == 1:  # doesn't pass data check
+        return 0
+
+    # Add GMT
+    df = add_GMT(df)
+
+    # Pull out warm season data
+    if window_use[0] > window_use[1]:  # spanning boreal winter
+        df_use = df.loc[(df['doy'] >= window_use[0]) | (df['doy'] < window_use[1]),
+                        ['date', 'GMT', 'temp_j', 'dewp_j', 'year', 'doy']]
+        df_use.loc[df['doy'] >= window_use[0], 'year'] += 1  # identify as year containing latter days
+    else:
+        df_use = df.loc[(df['doy'] >= window_use[0]) & (df['doy'] < window_use[1]),
+                        ['date', 'GMT', 'temp_j', 'dewp_j', 'year', 'doy']]
+
+    # Standardized temperature to zero mean and unit standard deviation
+    muT = np.mean(df_use['temp_j'])
+    stdT = np.std(df_use['temp_j'])
+    df_use = df_use.assign(temp_j=(df_use['temp_j']-muT)/stdT)
+
+    # remove mean GMT
+    df_use = df_use.assign(GMT=df_use['GMT']-np.mean(df_use['GMT']))
+
+    return df_use, muT, stdT, window_use
