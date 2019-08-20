@@ -1,7 +1,7 @@
 import numpy as np
 import cvxpy as cp
 from scipy import sparse
-from cxvpy import SolverError
+from cvxpy import SolverError
 
 
 def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lam1, lam2):
