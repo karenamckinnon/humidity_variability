@@ -154,6 +154,7 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lam1, lam2):
     except SolverError:  # try a second solver
         prob.solve(solver=cp.SCS)
     except SolverError:  # give up
+        print('Both ECOS and SCS failed.')
         beta = np.zeros((n,))
         yhat = q
         return beta, yhat
