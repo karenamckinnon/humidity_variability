@@ -56,9 +56,9 @@ if __name__ == '__main__':
     jobs_per_proc = np.floor(nstations/args.nproc)
 
     if args.this_proc == (args.nproc - 1):
-        these_jobs = np.arange(args.this_proc*jobs_per_proc, nstations)
+        these_jobs = np.arange(args.this_proc*jobs_per_proc, nstations).astype(int)
     else:
-        these_jobs = np.arange(args.this_proc*jobs_per_proc, (args.this_proc + 1)*jobs_per_proc)
+        these_jobs = np.arange(args.this_proc*jobs_per_proc, (args.this_proc + 1)*jobs_per_proc).astype(int)
 
     # Set a random seed for reproducibility
     np.random.seed(123)
@@ -67,6 +67,7 @@ if __name__ == '__main__':
         # t1 = time.time()
 
         this_file = metadata['station_id'][counter]
+        print(this_file)
 
         start_date = pd.datetime.strptime(metadata['begin'][counter], '%Y-%m-%d')
         end_date = pd.datetime.strptime(metadata['end'][counter], '%Y-%m-%d')
