@@ -88,6 +88,9 @@ if __name__ == '__main__':
                                                             end_year, window_length, for_summer)
         except TypeError:  # when data did not pass checks
             continue
+        except Exception as e:  # other issues
+            print(e.message, e.args)
+            continue
 
         # Sort data frame by temperature to allow us to minimize the second derivative of the T-Td relationship
         df_use = df_use.sort_values('temp_j')
