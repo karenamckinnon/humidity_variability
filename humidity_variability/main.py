@@ -89,7 +89,7 @@ if __name__ == '__main__':
         except TypeError:  # when data did not pass checks
             continue
         except Exception as e:  # other issues
-            print(e.message, e.args)
+            print(e)
             continue
 
         # Sort data frame by temperature to allow us to minimize the second derivative of the T-Td relationship
@@ -114,7 +114,7 @@ if __name__ == '__main__':
         try:
             BETA = fit_quantiles(qs, lam1, lam2, X, data, delta)
         except Exception as e:
-            print(e.message, e.args)
+            print(e)
 
         intercept = BETA[0, :]
         slope = BETA[1, :]
