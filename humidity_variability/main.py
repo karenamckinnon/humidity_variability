@@ -53,7 +53,7 @@ if __name__ == '__main__':
     # Divide stations among available processors
     nstations = len(metadata)
 
-    jobs_per_proc = np.floor(nstations/args.nproc)
+    jobs_per_proc = np.ceil(nstations/args.nproc)
 
     if args.this_proc == (args.nproc - 1):
         these_jobs = np.arange(args.this_proc*jobs_per_proc, nstations).astype(int)
