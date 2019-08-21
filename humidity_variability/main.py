@@ -108,12 +108,36 @@ if __name__ == '__main__':
         X[:, (2 + n):] = np.identity(n)*df_use['GMT'].values
 
         # Fit the model
-        BETA = fit_quantiles(qs, lam1, lam2, X, data, delta)
+        try:
+            BETA = fit_quantiles(qs, lam1, lam2, X, data, delta)
+        except Exception as e:
+            print(e.message, e.args)
+
+        intercept = BETA[0, :]
+        slope = BETA[1, :]
+        spline1 = BETA[2:(2+n), :]
+        spline2 = BETA[(2+n):, :]
+        del BETA
+
+        x_interp = np.arange(-5, 5.1, 0.1)
+        x_orig = df_use['temp_j'].values
+
+        spline1_interp = np.empty((len(x_interp), len(qs)))
+        spline2_interp = np.empty((len(x_interp), len(qs)))
+
+        for ct in range(len(qs)):
+            spline1_interp[:, ct] = np.interp(x_interp, x_orig, spline1[:, ct],
+                                              left=np.nan, right=np.nan)
+            spline2_interp[:, ct] = np.interp(x_interp, x_orig, spline2[:, ct],
+                                              left=np.nan, right=np.nan)
 
         # Save!
         savename = '%s/%s_params.npz' % (paramdir, this_file)
         np.savez(savename,
-                 BETA=BETA,
+                 intercept=intercept,
+                 slope=slope,
+                 spline1_interp=spline1_interp,
+                 spline2_interp=spline2_interp,
                  muT=muT,
                  stdT=stdT,
                  window_use=window_use,
