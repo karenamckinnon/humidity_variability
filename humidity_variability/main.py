@@ -178,3 +178,7 @@ if __name__ == '__main__':
                      window_use=window_use,
                      lat=metadata['lat'][counter],
                      lon=metadata['lon'][counter])
+
+        else:
+            print('Valid model args are linear and interaction')
+            break
