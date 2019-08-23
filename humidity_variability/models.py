@@ -351,13 +351,13 @@ def fit_linear_model(qs, X, data):
     # Fit quantiles above the middle
     yhat = yhat50
     for this_q in pos_q:
-        beta, yhat = fit_regularized_spline_QR(X, data, this_q/100, 'Below', yhat)
+        beta, yhat = fit_linear_QR(X, data, this_q/100, 'Below', yhat)
         BETA[:, qs_int == this_q] = beta[:, np.newaxis]
 
     # Fit quantiles below the median
     yhat = yhat50
     for this_q in neg_q[::-1]:
-        beta, yhat = fit_regularized_spline_QR(X, data, this_q/100, 'Above', yhat)
+        beta, yhat = fit_linear_QR(X, data, this_q/100, 'Above', yhat)
         BETA[:, qs_int == this_q] = beta[:, np.newaxis]
 
     return BETA
