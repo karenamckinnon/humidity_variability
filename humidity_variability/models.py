@@ -165,7 +165,7 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lam1, lam2):
     return beta, yhat
 
 
-def fit_quantiles(qs, lam1, lam2, X, data, delta):
+def fit_interaction_model(qs, lam1, lam2, X, data, delta):
     """Fit all desired quantiles, ensuring non-crossing.
 
     Parameters
@@ -205,7 +205,7 @@ def fit_quantiles(qs, lam1, lam2, X, data, delta):
     BETA = np.empty((nparams, nq))
 
     # Fit middle quantile
-    beta50, yhat50 = fit_regularized_spline_QR(X, data, delta, 0.5, 'None', None, lam1, lam2)
+    beta50, yhat50 = fit_regularized_spline_QR(X, data, delta, start_q/100, 'None', None, lam1, lam2)
     BETA[:, qs_int == start_q] = beta50[:, np.newaxis]
 
     # Fit quantiles above the middle
@@ -218,6 +218,146 @@ def fit_quantiles(qs, lam1, lam2, X, data, delta):
     yhat = yhat50
     for this_q in neg_q[::-1]:
         beta, yhat = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Above', yhat, lam1, lam2)
+        BETA[:, qs_int == this_q] = beta[:, np.newaxis]
+
+    return BETA
+
+
+def fit_linear_QR(X, data, tau, constraint, q):
+    """Fit linear QR model to data with optional non-crossing constraints.
+
+    Parameters
+    ----------
+    X : numpy.ndarray
+        The design matrix
+    data : numpy.ndarray
+        The 1D variable being modeled
+    tau : float
+        Quantile of interest \in (0, 1)
+    constraint : str
+        Type of constraint to impose: 'None', 'Below', 'Above'.
+        'Below' indicates no crossing of lower quantile (i.e. tau = 0.55 shouldn't cross tau = 0.5)
+        'Above' indicates no crossing of upper quantile (i.e. tau = 0.45 shouldn't cross tau = 0.5)
+        'None' imposes no constraints, and should be used for estimating the median quantile.
+    q : numpy.ndarray or None
+        The fitted quantile not to be crossed (if constraint is not None)
+
+    Returns
+    -------
+    beta : numpy.ndarray
+        Parameter coefficients for quantile regression model
+    yhat : numpy.ndarray
+        Conditional values of predictand for a given quantile
+    """
+    N, K = X.shape
+
+    # Cost function to be minized (c.T@z)
+    # np.repeat(0, 2*K): no penalty on coefficients themselves
+    # tau*np.repeat(1, N), (1-tau)*np.repeat(1, N): weight on positive and negative residuals
+    c = np.concatenate((np.repeat(0, 2*K),
+                        tau*np.repeat(1, N),
+                        (1-tau)*np.repeat(1, N)))
+
+    # Equality constraint: Az = b
+    # Constraint ensures that fitted quantile trend + residuals = predictand
+    A00 = X  # covariates for positive values of the variable
+    A01 = -1*X  # covariates for negative values of the variable
+    A02 = sparse.eye(N)  # Positive residuals
+    A03 = -1*sparse.eye(N)  # Negative residuals
+
+    A = sparse.hstack((A00, A01, A02, A03))
+
+    A = cp.Constant(A)
+    b = np.hstack((data.T))
+
+    # Determine if we have non-crossing constraints
+    # Inequality constraints written Gx <= h
+    # Always, constraint that all values of x are positive (> 0)
+    n = A.shape[1]
+
+    G1 = -1*sparse.eye(n)
+    if constraint == 'None':
+        n_constraints = 0
+        G = G1
+        del G1
+    else:
+        n_constraints = X.shape[0]
+        if constraint == 'Below':
+            G2 = sparse.hstack((-X, X, sparse.rand(N, 2*N, density=0)))
+        elif constraint == 'Above':
+            G2 = sparse.hstack((X, -X, sparse.rand(N, 2*N, density=0)))
+
+        G = sparse.vstack((G1, G2))
+
+    G = cp.Constant(G)
+
+    # Right hand side of inequality constraint
+    h = np.zeros((n + n_constraints, ))
+    if constraint == 'Below':
+        h[n:] = -q
+    elif constraint == 'Above':
+        h[n:] = q
+
+    z = cp.Variable(2*K + 2*N)  # parameters + residuals
+    objective = cp.Minimize(c.T@z)
+    prob = cp.Problem(objective,
+                      [A@z == b, G@z <= h])
+
+    prob.solve(solver=cp.ECOS)
+
+    beta = np.array(z.value[0:K] - z.value[K:2*K])
+    yhat = np.dot(X, beta)
+
+    return beta, yhat
+
+
+def fit_linear_model(qs, X, data):
+    """Fit all desired quantiles, ensuring non-crossing.
+
+    Parameters
+    ----------
+    qs : numpy.ndarray
+        The set of quantiles (0, 1) to be fit.
+    X : numpy.ndarray
+        The design matrix
+    data : numpy.ndarray
+        The 1D variable being modeled
+
+    Returns
+    -------
+    BETA : numpy.ndarray
+        The parameter vector for all quantiles.
+    """
+
+    # Switch quantiles to integers to ensure matching
+    qs_int = (100*qs).astype(int)
+
+    # Start with the desired quantile closest to the median
+    start_q = qs_int[np.argmin(np.abs(qs_int - 50))]
+    delta_q = qs_int - start_q
+
+    pos_q = qs_int[delta_q > 0]
+    neg_q = qs_int[delta_q < 0]
+
+    nparams = X.shape[1]
+    nq = len(qs_int)
+
+    BETA = np.empty((nparams, nq))
+
+    # Fit middle quantile
+    beta50, yhat50 = fit_linear_QR(X, data, start_q/100, 'None', None)
+    BETA[:, qs_int == start_q] = beta50[:, np.newaxis]
+
+    # Fit quantiles above the middle
+    yhat = yhat50
+    for this_q in pos_q:
+        beta, yhat = fit_regularized_spline_QR(X, data, this_q/100, 'Below', yhat)
+        BETA[:, qs_int == this_q] = beta[:, np.newaxis]
+
+    # Fit quantiles below the median
+    yhat = yhat50
+    for this_q in neg_q[::-1]:
+        beta, yhat = fit_regularized_spline_QR(X, data, this_q/100, 'Above', yhat)
         BETA[:, qs_int == this_q] = beta[:, np.newaxis]
 
     return BETA
