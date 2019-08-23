@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from humidity_variability.utils import gsod_preprocess
-from humidity_variability.models import fit_quantiles
+from humidity_variability.models import fit_interaction_model, fit_linear_model
 import ctypes
 from subprocess import check_call
 import os
@@ -12,6 +12,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('this_proc', type=int, help='Processor number (zero-indexed) of nproc')
     parser.add_argument('nproc', type=int, help='Total number of processors being used.')
+    parser.add_argument('model', type=str, help='Fit linear or interaction model.')
 
     args = parser.parse_args()
 
@@ -64,7 +65,6 @@ if __name__ == '__main__':
     np.random.seed(123)
 
     for counter in these_jobs:
-        # t1 = time.time()
 
         this_file = metadata['station_id'][counter]
         print(this_file)
@@ -92,60 +92,89 @@ if __name__ == '__main__':
             print(e)
             continue
 
-        # Sort data frame by temperature to allow us to minimize the second derivative of the T-Td relationship
-        df_use = df_use.sort_values('temp_j')
+        if args.model == 'interaction':
+            # Sort data frame by temperature to allow us to minimize the second derivative of the T-Td relationship
+            df_use = df_use.sort_values('temp_j')
 
-        # Calculate the step between each temperature value
-        delta = np.diff(df_use['temp_j'].values)
+            # Calculate the step between each temperature value
+            delta = np.diff(df_use['temp_j'].values)
 
-        # Pull out the data to be modeled
-        data = df_use['dewp_j'].values
+            # Pull out the data to be modeled
+            data = df_use['dewp_j'].values
 
-        # Create X, the design matrix
-        # Intercept, linear in GMT, knots at all data points for temperature, same times GMT
-        n = len(df_use)
-        ncols = 2 + 2*n
-        X = np.ones((n, ncols))
-        X[:, 1] = df_use['GMT'].values
-        X[:, 2:(2 + n)] = np.identity(n)
-        X[:, (2 + n):] = np.identity(n)*df_use['GMT'].values
+            # Create X, the design matrix
+            # Intercept, linear in GMT, knots at all data points for temperature, same times GMT
+            n = len(df_use)
+            ncols = 2 + 2*n
+            X = np.ones((n, ncols))
+            X[:, 1] = df_use['GMT'].values
+            X[:, 2:(2 + n)] = np.identity(n)
+            X[:, (2 + n):] = np.identity(n)*df_use['GMT'].values
 
-        # Fit the model
-        try:
-            BETA = fit_quantiles(qs, lam1, lam2, X, data, delta)
-        except Exception as e:
-            print(e)
+            # Fit the model
+            try:
+                BETA = fit_interaction_model(qs, lam1, lam2, X, data, delta)
+            except Exception as e:
+                print(e)
 
-        intercept = BETA[0, :]
-        slope = BETA[1, :]
-        spline1 = BETA[2:(2+n), :]
-        spline2 = BETA[(2+n):, :]
-        del BETA
+            intercept = BETA[0, :]
+            slope = BETA[1, :]
+            spline1 = BETA[2:(2+n), :]
+            spline2 = BETA[(2+n):, :]
+            del BETA
 
-        x_interp = np.arange(-5, 5.1, 0.1)
-        x_orig = df_use['temp_j'].values
+            x_interp = np.arange(-5, 5.1, 0.1)
+            x_orig = df_use['temp_j'].values
 
-        spline1_interp = np.empty((len(x_interp), len(qs)))
-        spline2_interp = np.empty((len(x_interp), len(qs)))
+            spline1_interp = np.empty((len(x_interp), len(qs)))
+            spline2_interp = np.empty((len(x_interp), len(qs)))
 
-        for ct in range(len(qs)):
-            spline1_interp[:, ct] = np.interp(x_interp, x_orig, spline1[:, ct],
-                                              left=np.nan, right=np.nan)
-            spline2_interp[:, ct] = np.interp(x_interp, x_orig, spline2[:, ct],
-                                              left=np.nan, right=np.nan)
+            for ct in range(len(qs)):
+                spline1_interp[:, ct] = np.interp(x_interp, x_orig, spline1[:, ct],
+                                                  left=np.nan, right=np.nan)
+                spline2_interp[:, ct] = np.interp(x_interp, x_orig, spline2[:, ct],
+                                                  left=np.nan, right=np.nan)
 
-        # Save!
-        savename = '%s/%s_params.npz' % (paramdir, this_file)
-        np.savez(savename,
-                 intercept=intercept,
-                 slope=slope,
-                 spline1_interp=spline1_interp,
-                 spline2_interp=spline2_interp,
-                 muT=muT,
-                 stdT=stdT,
-                 window_use=window_use,
-                 lat=metadata['lat'][counter],
-                 lon=metadata['lon'][counter])
+            # Save!
+            savename = '%s/%s_params.npz' % (paramdir, this_file)
+            np.savez(savename,
+                     intercept=intercept,
+                     slope=slope,
+                     spline1_interp=spline1_interp,
+                     spline2_interp=spline2_interp,
+                     muT=muT,
+                     stdT=stdT,
+                     window_use=window_use,
+                     lat=metadata['lat'][counter],
+                     lon=metadata['lon'][counter])
+        elif args.model == 'linear':
+            # Pull out the data to be modeled
+            data = df_use['dewp_j'].values
 
-        # dt = time.time() - t1
-        # print('Fit took %0.1f seconds' % dt)
+            # Create X, the design matrix
+            # Intercept, linear in GMT
+            n = len(df_use)
+            ncols = 2
+            X = np.ones((n, ncols))
+            X[:, 1] = df_use['GMT'].values
+
+            # Fit the model
+            try:
+                BETA = fit_linear_model(qs, X, data)
+            except Exception as e:
+                print(e)
+
+            intercept = BETA[0, :]
+            slope = BETA[1, :]
+            del BETA
+
+            # Save!
+            savename = '%s/%s_linear_params.npz' % (paramdir, this_file)
+            np.savez(savename,
+                     intercept=intercept,
+                     slope=slope,
+                     muT=muT,
+                     stdT=stdT,
+                     window_use=window_use,
+                     lat=metadata['lat'][counter],
+                     lon=metadata['lon'][counter])
