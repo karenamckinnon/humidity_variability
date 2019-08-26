@@ -366,3 +366,27 @@ def gsod_preprocess(df, offset, spread, start_year, end_year, window_length, for
     df_use = df_use.assign(GMT=df_use['GMT']-np.mean(df_use['GMT']))
 
     return df_use, muT, stdT, window_use
+
+
+def mod_legendre(q):
+    """Calculate the first four modified Legendre polynomials over [0, 1].
+
+    Parameters
+    ----------
+    q : numpy.ndarray
+        Quantiles [0, 1] at which to calculate the Legendre polynomials values.
+
+    Returns
+    -------
+    bases : numpy.ndarray
+        Array containing first four Legendre polynomials evaluated at the quantile values.
+
+    """
+    P0 = np.ones((len(q)))
+    P1 = 2*q - 1
+    P2 = 0.5*(3*P1**2 - 1)
+    P3 = 0.5*(5*P1**3 - 3*P1)
+
+    bases = np.vstack((P0, P1, P2, P3))
+
+    return bases
