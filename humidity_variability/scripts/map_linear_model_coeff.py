@@ -134,7 +134,7 @@ for q in qs_to_plot:
     cmap = plt.cm.BrBG
 
     # define the bins and normalize
-    bounds = np.arange(-8, 9, 1)
+    bounds = np.arange(-4, 4.1, 0.5)
     norm = colors.BoundaryNorm(bounds, cmap.N)
 
     idx = qs_int == q
@@ -185,7 +185,7 @@ for counter in range(4):
     cmap = plt.cm.BrBG
 
     # define the bins and normalize
-    bounds = np.arange(-8, 9, 1)
+    bounds = np.arange(-4, 4.1, 0.5)
     norm = colors.BoundaryNorm(bounds, cmap.N)
 
     sc = ax.scatter(lon, lat,
