@@ -57,7 +57,7 @@ lat = np.empty((nfiles,))
 lon = np.empty((nfiles,))
 
 for counter in range(nfiles):
-
+    print('%i/%i' % (counter, nfiles))
     this_file = param_files[counter]
 
     station_id = this_file.split('/')[-1].split('_')[0]
@@ -135,14 +135,16 @@ np.savez('%s/%s' % (savedir, savename),
          coeff=coeff1,
          lat=lat,
          lon=lon,
-         rho2=rho2_indiv1)
+         rho2=rho2_indiv1,
+         GMT_params=GMT_params)
 
 savename = 'interaction_model_cov_params_legendre_projections.npz'
 np.savez('%s/%s' % (savedir, savename),
          coeff=coeff2,
          lat=lat,
          lon=lon,
-         rho2=rho2_indiv2)
+         rho2=rho2_indiv2,
+         cov_params=cov_params)
 
 # Make maps
 qs_to_plot = 5, 50, 95
