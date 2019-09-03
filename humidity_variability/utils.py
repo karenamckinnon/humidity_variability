@@ -357,6 +357,9 @@ def gsod_preprocess(df, offset, spread, start_year, end_year, window_length, for
         df_use = df.loc[(df['doy'] >= window_use[0]) & (df['doy'] < window_use[1]),
                         ['date', 'GMT', 'temp_j', 'dewp_j', 'year', 'doy']]
 
+    # Subset to span start_year to end_year
+    df_use = df_use[(df_use['year'] >= start_year) & (df_use['year'] <= end_year)]
+
     # Standardized temperature to zero mean and unit standard deviation
     muT = np.mean(df_use['temp_j'])
     stdT = np.std(df_use['temp_j'])
