@@ -2,6 +2,7 @@ import numpy as np
 from datetime import datetime
 import pandas as pd
 import observational_large_ensemble.utils as olens_utils
+from helpful_utilities.meteo import F_to_C
 
 
 def jitter(ts, offset, spread):
@@ -360,15 +361,11 @@ def gsod_preprocess(df, offset, spread, start_year, end_year, window_length, for
     # Subset to span start_year to end_year
     df_use = df_use[(df_use['year'] >= start_year) & (df_use['year'] <= end_year)]
 
-    # Standardized temperature to zero mean and unit standard deviation
-    muT = np.mean(df_use['temp_j'])
-    stdT = np.std(df_use['temp_j'])
-    df_use = df_use.assign(temp_j=(df_use['temp_j']-muT)/stdT)
+    # Switch from F to C
+    df_use = df_use.assign(dewp_j=F_to_C(df_use['dewp_j']))
+    df_use = df_use.assign(temp_j=F_to_C(df_use['temp_j']))
 
-    # remove mean GMT
-    df_use = df_use.assign(GMT=df_use['GMT']-np.mean(df_use['GMT']))
-
-    return df_use, muT, stdT, window_use
+    return df_use, window_use
 
 
 def mod_legendre(q):
