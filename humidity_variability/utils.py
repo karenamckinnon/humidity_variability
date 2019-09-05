@@ -394,3 +394,49 @@ def mod_legendre(q):
     bases = np.vstack((P0, P1, P2, P3_orth))
 
     return bases
+
+
+def calc_SIC(beta, yhat, data, tau, df_use, thresh=1e-4):
+    """Calculate the Schwarz Information Criterion for a given value of lambda.
+
+    Note that this script is _specific_ to the model used in McKinnon and Poppick, in prep.
+
+    Parameters
+    ----------
+    beta : numpy.ndarray
+        Model parameters (intercept, slope, two splines)
+    yhat : numpy.array
+        Fitted model values. Same size as data.
+    data : numpy.array
+        The original data being fit. Same size as yhat.
+    tau : float
+        Quantile being fit
+    df_use : pandas.DataFrame
+        Dataframe containing GMT time series
+    thresh : float
+        Threshold of difference in slope at which point an active knot is identified
+
+    Returns
+    -------
+    SIC : float
+        The Schwarz Information Criterion value
+
+    """
+    N = len(data)
+
+    spline1 = beta[2:(2+N)]
+    xvals = df_use['temp_j'].values
+    slope = (spline1[1:] - spline1[:-1])/(xvals[1:] - xvals[:-1])
+    thresh = 1e-4
+    p_lambda = np.sum(np.abs(slope[1:] - slope[:-1]) > thresh)
+
+    spline2 = beta[(2+N):]/df_use['GMT'].values
+    slope = (spline2[1:] - spline2[:-1])/(xvals[1:] - xvals[:-1])
+    p_lambda += np.sum(np.abs(slope[1:] - slope[:-1]) > thresh)
+
+    u = data - yhat
+    rho = u*(tau*(u > 0).astype(float) - (1 - tau)*(u < 0).astype(float))
+
+    SIC = np.log(1/N*np.sum(rho)) + 1/(2*N)*p_lambda*np.log(N)
+
+    return SIC
