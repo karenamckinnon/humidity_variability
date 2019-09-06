@@ -2,9 +2,10 @@ import numpy as np
 import cvxpy as cp
 from scipy import sparse
 from cvxpy import SolverError
+from humidity_variability.utils import calc_SIC
 
 
-def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lam1, lam2):
+def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lambd_values):
     """Fit regularized spline regression to the data.
 
     The model is coded to be for:
@@ -27,10 +28,8 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lam1, lam2):
         'None' imposes no constraints, and should be used for estimating the median quantile.
     q : numpy.ndarray or None
         The fitted quantile not to be crossed (if constraint is not None)
-    lam1 : float
-        Regularization parameter for the first spline
-    lam2 : float
-        Regularization parameter for the second (interaction) spline
+    lambd_values : numpy.ndarray
+        The initial set of lambda values to try.
 
     Returns
     -------
@@ -38,9 +37,12 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lam1, lam2):
         Parameter coefficients for quantile regression model
     yhat : numpy.ndarray
         Conditional values of predictand for a given quantile
+    best_lambda : float
+        Selected value of lambda based on SIC.
     """
 
     N, K = X.shape
+    lambd = cp.Parameter(nonneg=True)
 
     diag_vec = 1/delta
     off_diag_1 = -1/delta[:-1] - 1/delta[1:]
@@ -73,8 +75,8 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lam1, lam2):
     c = np.concatenate((np.repeat(0, 2*K),
                         tau*np.repeat(1, N),
                         (1-tau)*np.repeat(1, N),
-                        lam1*np.repeat(1, 2*(N-1)),  # pos/neg second derivative of first spline term
-                        lam2*np.repeat(1, 2*(N-1))))  # pos/neg second derivative of second spline term
+                        lambd*np.repeat(1, 2*(N-1)),  # pos/neg second derivative of first spline term
+                        lambd*np.repeat(1, 2*(N-1))))  # pos/neg second derivative of second spline term
 
     # Equality constraint: Az = b
     # Constraint ensures that fitted quantile trend + residuals = predictand
@@ -149,33 +151,72 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lam1, lam2):
     prob = cp.Problem(objective,
                       [A@z == b, G@z <= h])
 
+    SIC = np.empty((len(lambd_values)))
+    for ct_v, v in enumerate(lambd_values):
+        lambd.value = v
+
+        try:
+            prob.solve(solver=cp.ECOS)
+        except SolverError:  # try a second solver
+            prob.solve(solver=cp.SCS)
+        except SolverError:  # give up
+            print('Both ECOS and SCS failed.')
+            return 0
+
+        beta = np.array(z.value[0:K] - z.value[K:2*K])
+        yhat = np.dot(X, beta)
+
+        SIC[ct_v] = calc_SIC(beta, yhat, data, tau, delta, X[:, 1])
+
+    # Find two SIC values that span the minimum
+    min_idx = np.argmin(SIC)
+    new_idx = np.array([min_idx - 1, min_idx + 1])
+    new_idx[new_idx < 0] = 0
+    new_idx[new_idx > (len(SIC) - 1)] = (len(SIC) - 1)
+    new_range = lambd_values[new_idx]
+    new_range = np.linspace(new_range[0], new_range[1], 5)
+    SIC = np.empty((len(new_range)))
+
+    for ct_v, v in enumerate(new_range):
+        lambd.value = v
+        try:
+            prob.solve(solver=cp.ECOS)
+        except SolverError:  # try a second solver
+            prob.solve(solver=cp.SCS)
+        except SolverError:  # give up
+            print('Both ECOS and SCS failed.')
+            return 0
+
+        beta = np.array(z.value[0:K] - z.value[K:2*K])
+        yhat = np.dot(X, beta)
+
+        SIC[ct_v] = calc_SIC(beta, yhat, data, tau, delta, X[:, 1])
+
+    best_lambda = new_range[np.argmin(SIC)]
+    lambd.value = best_lambda
     try:
         prob.solve(solver=cp.ECOS)
     except SolverError:  # try a second solver
         prob.solve(solver=cp.SCS)
     except SolverError:  # give up
         print('Both ECOS and SCS failed.')
-        beta = np.zeros((n,))
-        yhat = q
-        return beta, yhat
+        return 0
 
     beta = np.array(z.value[0:K] - z.value[K:2*K])
     yhat = np.dot(X, beta)
 
-    return beta, yhat
+    return beta, yhat, best_lambda
 
 
-def fit_interaction_model(qs, lam1, lam2, X, data, delta):
+def fit_interaction_model(qs, lambd_values, X, data, delta):
     """Fit all desired quantiles, ensuring non-crossing.
 
     Parameters
     ----------
     qs : numpy.ndarray
         The set of quantiles (0, 1) to be fit.
-    lam1 : float
-        The regularization parameter for the temperature-dewpoint spline
-    lam2 : float
-        The regularization parameter for the interaction term spline
+    lambd_values : numpy.ndarray
+        The initial set of lambda values to try.
     X : numpy.ndarray
         The design matrix
     data : numpy.ndarray
@@ -187,6 +228,8 @@ def fit_interaction_model(qs, lam1, lam2, X, data, delta):
     -------
     BETA : numpy.ndarray
         The parameter vector for all quantiles. There are (2 + 2*len(data)) parameters.
+    lambd : numpy.ndarray
+        The selected lambda for each quantile.
     """
 
     # Switch quantiles to integers to ensure matching
@@ -203,24 +246,28 @@ def fit_interaction_model(qs, lam1, lam2, X, data, delta):
     nq = len(qs_int)
 
     BETA = np.empty((nparams, nq))
+    lambd = np.empty((nq, ))
 
     # Fit middle quantile
-    beta50, yhat50 = fit_regularized_spline_QR(X, data, delta, start_q/100, 'None', None, lam1, lam2)
+    beta50, yhat50, this_lambd = fit_regularized_spline_QR(X, data, delta, start_q/100, 'None', None, lambd_values)
     BETA[:, qs_int == start_q] = beta50[:, np.newaxis]
+    lambd[qs_int == start_q] = this_lambd
 
     # Fit quantiles above the middle
     yhat = yhat50
     for this_q in pos_q:
-        beta, yhat = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Below', yhat, lam1, lam2)
+        beta, yhat, this_lambd = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Below', yhat, lambd_values)
         BETA[:, qs_int == this_q] = beta[:, np.newaxis]
+        lambd[qs_int == this_q] = this_lambd
 
     # Fit quantiles below the median
     yhat = yhat50
     for this_q in neg_q[::-1]:
-        beta, yhat = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Above', yhat, lam1, lam2)
+        beta, yhat, this_lambd = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Above', yhat, lambd_values)
         BETA[:, qs_int == this_q] = beta[:, np.newaxis]
+        lambd[qs_int == this_q] = this_lambd
 
-    return BETA
+    return BETA, lambd
 
 
 def fit_linear_QR(X, data, tau, constraint, q):
