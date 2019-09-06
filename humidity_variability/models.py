@@ -74,9 +74,11 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lambd_values):
     # size: 2*K + 2*N + 2*(N - 1)
     c = np.concatenate((np.repeat(0, 2*K),
                         tau*np.repeat(1, N),
-                        (1-tau)*np.repeat(1, N),
-                        lambd*np.repeat(1, 2*(N-1)),  # pos/neg second derivative of first spline term
-                        lambd*np.repeat(1, 2*(N-1))))  # pos/neg second derivative of second spline term
+                        (1-tau)*np.repeat(1, N)))
+
+    c = cp.hstack((c,
+                   lambd*np.repeat(1, 2*(N-1)),  # pos/neg second derivative of first spline term
+                   lambd*np.repeat(1, 2*(N-1))))  # pos/neg second derivative of second spline term
 
     # Equality constraint: Az = b
     # Constraint ensures that fitted quantile trend + residuals = predictand
@@ -246,28 +248,28 @@ def fit_interaction_model(qs, lambd_values, X, data, delta):
     nq = len(qs_int)
 
     BETA = np.empty((nparams, nq))
-    lambd = np.empty((nq, ))
+    save_lambd = np.empty((nq, ))
 
     # Fit middle quantile
     beta50, yhat50, this_lambd = fit_regularized_spline_QR(X, data, delta, start_q/100, 'None', None, lambd_values)
     BETA[:, qs_int == start_q] = beta50[:, np.newaxis]
-    lambd[qs_int == start_q] = this_lambd
+    save_lambd[qs_int == start_q] = this_lambd
 
     # Fit quantiles above the middle
     yhat = yhat50
     for this_q in pos_q:
         beta, yhat, this_lambd = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Below', yhat, lambd_values)
         BETA[:, qs_int == this_q] = beta[:, np.newaxis]
-        lambd[qs_int == this_q] = this_lambd
+        save_lambd[qs_int == this_q] = this_lambd
 
     # Fit quantiles below the median
     yhat = yhat50
     for this_q in neg_q[::-1]:
         beta, yhat, this_lambd = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Above', yhat, lambd_values)
         BETA[:, qs_int == this_q] = beta[:, np.newaxis]
-        lambd[qs_int == this_q] = this_lambd
+        save_lambd[qs_int == this_q] = this_lambd
 
-    return BETA, lambd
+    return BETA, save_lambd
 
 
 def fit_linear_QR(X, data, tau, constraint, q):
