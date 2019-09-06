@@ -396,7 +396,7 @@ def mod_legendre(q):
     return bases
 
 
-def calc_SIC(beta, yhat, data, tau, df_use, thresh=1e-4):
+def calc_SIC(beta, yhat, data, tau, delta, G, thresh=1e-4):
     """Calculate the Schwarz Information Criterion for a given value of lambda.
 
     Note that this script is _specific_ to the model used in McKinnon and Poppick, in prep.
@@ -411,8 +411,10 @@ def calc_SIC(beta, yhat, data, tau, df_use, thresh=1e-4):
         The original data being fit. Same size as yhat.
     tau : float
         Quantile being fit
-    df_use : pandas.DataFrame
-        Dataframe containing GMT time series
+    delta : numpy.ndarray
+        The difference between sequential temperature values
+    G : numpy.ndarray
+        The global mean temperature term.
     thresh : float
         Threshold of difference in slope at which point an active knot is identified
 
@@ -425,13 +427,12 @@ def calc_SIC(beta, yhat, data, tau, df_use, thresh=1e-4):
     N = len(data)
 
     spline1 = beta[2:(2+N)]
-    xvals = df_use['temp_j'].values
-    slope = (spline1[1:] - spline1[:-1])/(xvals[1:] - xvals[:-1])
+    slope = (spline1[1:] - spline1[:-1])/delta
     thresh = 1e-4
     p_lambda = np.sum(np.abs(slope[1:] - slope[:-1]) > thresh)
 
-    spline2 = beta[(2+N):]/df_use['GMT'].values
-    slope = (spline2[1:] - spline2[:-1])/(xvals[1:] - xvals[:-1])
+    spline2 = beta[(2+N):]/G
+    slope = (spline2[1:] - spline2[:-1])/delta
     p_lambda += np.sum(np.abs(slope[1:] - slope[:-1]) > thresh)
 
     u = data - yhat
