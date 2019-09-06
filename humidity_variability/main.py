@@ -84,15 +84,23 @@ if __name__ == '__main__':
 
         # Perform data preprocessing / selection of season
         try:
-            df_use, muT, stdT, window_use = gsod_preprocess(df, offset, spread, start_year,
-                                                            end_year, window_length, for_summer)
+            df_use, window_use = gsod_preprocess(df, offset, spread, start_year,
+                                                 end_year, window_length, for_summer)
         except TypeError:  # when data did not pass checks
             continue
         except Exception as e:  # other issues
             print(e)
             continue
 
+        # remove mean of GMT and T
+        muT = np.mean(df_use['temp_j'])
+        df_use = df_use.assign(temp_j=df_use['temp_j'] - muT)
+        df_use = df_use.assign(GMT=df_use['GMT'] - np.mean(df_use['GMT']))
+
         if args.model == 'interaction':
+            # Initial set of lambda values to test
+            lambd_values = np.logspace(-2, 1, 10)
+
             # Sort data frame by temperature to allow us to minimize the second derivative of the T-Td relationship
             df_use = df_use.sort_values('temp_j')
 
@@ -113,40 +121,20 @@ if __name__ == '__main__':
 
             # Fit the model
             try:
-                BETA = fit_interaction_model(qs, lam1, lam2, X, data, delta)
+                BETA, lambd = fit_interaction_model(qs, lambd_values, X, data, delta)
             except Exception as e:
                 print(e)
-
-            intercept = BETA[0, :]
-            slope = BETA[1, :]
-            spline1 = BETA[2:(2+n), :]
-            spline2 = BETA[(2+n):, :]
-            del BETA
-
-            x_interp = np.arange(-5, 5.1, 0.1)
-            x_orig = df_use['temp_j'].values
-
-            spline1_interp = np.empty((len(x_interp), len(qs)))
-            spline2_interp = np.empty((len(x_interp), len(qs)))
-
-            for ct in range(len(qs)):
-                spline1_interp[:, ct] = np.interp(x_interp, x_orig, spline1[:, ct],
-                                                  left=np.nan, right=np.nan)
-                spline2_interp[:, ct] = np.interp(x_interp, x_orig, spline2[:, ct],
-                                                  left=np.nan, right=np.nan)
 
             # Save!
             savename = '%s/%s_params.npz' % (paramdir, this_file)
             np.savez(savename,
-                     intercept=intercept,
-                     slope=slope,
-                     spline1_interp=spline1_interp,
-                     spline2_interp=spline2_interp,
+                     BETA=BETA,
+                     lambd=lambd,
                      muT=muT,
-                     stdT=stdT,
                      window_use=window_use,
                      lat=metadata['lat'][counter],
                      lon=metadata['lon'][counter])
+
         elif args.model == 'linear':
             # Pull out the data to be modeled
             data = df_use['dewp_j'].values
@@ -174,7 +162,6 @@ if __name__ == '__main__':
                      intercept=intercept,
                      slope=slope,
                      muT=muT,
-                     stdT=stdT,
                      window_use=window_use,
                      lat=metadata['lat'][counter],
                      lon=metadata['lon'][counter])
