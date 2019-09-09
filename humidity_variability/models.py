@@ -3,6 +3,7 @@ import cvxpy as cp
 from scipy import sparse
 from cvxpy import SolverError
 from humidity_variability.utils import calc_SIC
+import time
 
 
 def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lambd_values):
@@ -251,23 +252,35 @@ def fit_interaction_model(qs, lambd_values, X, data, delta):
     save_lambd = np.empty((nq, ))
 
     # Fit middle quantile
+    print('Fitting quantile %02d' % start_q)
+    t1 = time.time()
     beta50, yhat50, this_lambd = fit_regularized_spline_QR(X, data, delta, start_q/100, 'None', None, lambd_values)
     BETA[:, qs_int == start_q] = beta50[:, np.newaxis]
     save_lambd[qs_int == start_q] = this_lambd
+    dt = time.time() - t1
+    print('Time elapsed: %0.2f seconds' % dt)
 
     # Fit quantiles above the middle
     yhat = yhat50
     for this_q in pos_q:
+        print('Fitting quantile %02d' % this_q)
+        t1 = time.time()
         beta, yhat, this_lambd = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Below', yhat, lambd_values)
         BETA[:, qs_int == this_q] = beta[:, np.newaxis]
         save_lambd[qs_int == this_q] = this_lambd
+        dt = time.time() - t1
+        print('Time elapsed: %0.2f seconds' % dt)
 
     # Fit quantiles below the median
     yhat = yhat50
     for this_q in neg_q[::-1]:
+        print('Fitting quantile %02d' % this_q)
+        t1 = time.time()
         beta, yhat, this_lambd = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Above', yhat, lambd_values)
         BETA[:, qs_int == this_q] = beta[:, np.newaxis]
         save_lambd[qs_int == this_q] = this_lambd
+        dt = time.time() - t1
+        print('Time elapsed: %0.2f seconds' % dt)
 
     return BETA, save_lambd
 
