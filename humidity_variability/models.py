@@ -177,7 +177,7 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lambd_values):
     new_idx[new_idx < 0] = 0
     new_idx[new_idx > (len(SIC) - 1)] = (len(SIC) - 1)
     new_range = lambd_values[new_idx]
-    new_range = np.linspace(new_range[0], new_range[1], 5)
+    new_range = np.logspace(np.log10(new_range[0]), np.log10(new_range[1]), 6)
     SIC = np.empty((len(new_range)))
 
     for ct_v, v in enumerate(new_range):
