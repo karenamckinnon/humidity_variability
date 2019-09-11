@@ -29,8 +29,8 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lambd_values):
         'None' imposes no constraints, and should be used for estimating the median quantile.
     q : numpy.ndarray or None
         The fitted quantile not to be crossed (if constraint is not None)
-    lambd_values : numpy.ndarray
-        The initial set of lambda values to try.
+    lambd_values : numpy.ndarray or float
+        The initial set of lambda values to try, or a single lambda value to use
 
     Returns
     -------
@@ -154,49 +154,53 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lambd_values):
     prob = cp.Problem(objective,
                       [A@z == b, G@z <= h])
 
-    SIC = np.empty((len(lambd_values)))
-    for ct_v, v in enumerate(lambd_values):
-        lambd.value = v
+    if (isinstance(lambd_values, float) | isinstance(lambd_values, int)):
+        lambd.value = lambd_values
+    else:
+        SIC = np.empty((len(lambd_values)))
+        for ct_v, v in enumerate(lambd_values):
+            lambd.value = v
 
-        try:
-            prob.solve(solver=cp.ECOS)
-        except SolverError:  # try a second solver
-            prob.solve(solver=cp.SCS)
-        except SolverError:  # give up
-            print('Both ECOS and SCS failed.')
-            return 0
+            try:
+                prob.solve(solver=cp.ECOS)
+            except SolverError:  # try a second solver
+                prob.solve(solver=cp.SCS)
+            except SolverError:  # give up
+                print('Both ECOS and SCS failed.')
+                return 0
 
-        beta = np.array(z.value[0:K] - z.value[K:2*K])
-        yhat = np.dot(X, beta)
+            beta = np.array(z.value[0:K] - z.value[K:2*K])
+            yhat = np.dot(X, beta)
 
-        SIC[ct_v] = calc_SIC(beta, yhat, data, tau, delta, X[:, 1])
+            SIC[ct_v] = calc_SIC(beta, yhat, data, tau, delta, X[:, 1])
 
-    # Find two SIC values that span the minimum
-    min_idx = np.argmin(SIC)
-    new_idx = np.array([min_idx - 1, min_idx + 1])
-    new_idx[new_idx < 0] = 0
-    new_idx[new_idx > (len(SIC) - 1)] = (len(SIC) - 1)
-    new_range = lambd_values[new_idx]
-    new_range = np.logspace(np.log10(new_range[0]), np.log10(new_range[1]), 6)
-    SIC = np.empty((len(new_range)))
+        # Find two SIC values that span the minimum
+        min_idx = np.argmin(SIC)
+        new_idx = np.array([min_idx - 1, min_idx + 1])
+        new_idx[new_idx < 0] = 0
+        new_idx[new_idx > (len(SIC) - 1)] = (len(SIC) - 1)
+        new_range = lambd_values[new_idx]
+        new_range = np.logspace(np.log10(new_range[0]), np.log10(new_range[1]), 6)
+        SIC = np.empty((len(new_range)))
 
-    for ct_v, v in enumerate(new_range):
-        lambd.value = v
-        try:
-            prob.solve(solver=cp.ECOS)
-        except SolverError:  # try a second solver
-            prob.solve(solver=cp.SCS)
-        except SolverError:  # give up
-            print('Both ECOS and SCS failed.')
-            return 0
+        for ct_v, v in enumerate(new_range):
+            lambd.value = v
+            try:
+                prob.solve(solver=cp.ECOS)
+            except SolverError:  # try a second solver
+                prob.solve(solver=cp.SCS)
+            except SolverError:  # give up
+                print('Both ECOS and SCS failed.')
+                return 0
 
-        beta = np.array(z.value[0:K] - z.value[K:2*K])
-        yhat = np.dot(X, beta)
+            beta = np.array(z.value[0:K] - z.value[K:2*K])
+            yhat = np.dot(X, beta)
 
-        SIC[ct_v] = calc_SIC(beta, yhat, data, tau, delta, X[:, 1])
+            SIC[ct_v] = calc_SIC(beta, yhat, data, tau, delta, X[:, 1])
 
-    best_lambda = new_range[np.argmin(SIC)]
-    lambd.value = best_lambda
+        best_lambda = new_range[np.argmin(SIC)]
+        lambd.value = best_lambda
+
     try:
         prob.solve(solver=cp.ECOS)
     except SolverError:  # try a second solver
