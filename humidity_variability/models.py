@@ -155,7 +155,7 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lambd_values):
                       [A@z == b, G@z <= h])
 
     if (isinstance(lambd_values, float) | isinstance(lambd_values, int)):
-        lambd.value = lambd_values
+        best_lambda = lambd_values  # forcing a single value of lambda
     else:
         SIC = np.empty((len(lambd_values)))
         for ct_v, v in enumerate(lambd_values):
@@ -199,7 +199,8 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lambd_values):
             SIC[ct_v] = calc_SIC(beta, yhat, data, tau, delta, X[:, 1])
 
         best_lambda = new_range[np.argmin(SIC)]
-        lambd.value = best_lambda
+
+    lambd.value = best_lambda
 
     try:
         prob.solve(solver=cp.ECOS)
