@@ -429,11 +429,13 @@ def calc_SIC(beta, yhat, data, tau, delta, G, thresh=1e-4):
     spline1 = beta[2:(2+N)]
     slope = (spline1[1:] - spline1[:-1])/delta
     thresh = 1e-4
-    p_lambda = np.sum(np.abs(slope[1:] - slope[:-1]) > thresh)
+    p_lambda = np.sum(np.abs(slope[1:] - slope[:-1]) > thresh) + 2  # changes in slope + end points
 
     spline2 = beta[(2+N):]/G
     slope = (spline2[1:] - spline2[:-1])/delta
-    p_lambda += np.sum(np.abs(slope[1:] - slope[:-1]) > thresh)
+    p_lambda += np.sum(np.abs(slope[1:] - slope[:-1]) > thresh) + 2  # changes in slope + end points
+
+    p_lambda += 2  # intercept and slope
 
     u = data - yhat
     rho = u*(tau*(u > 0).astype(float) - (1 - tau)*(u < 0).astype(float))
