@@ -162,9 +162,9 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lambd_values):
             lambd.value = v
 
             try:
-                prob.solve(solver=cp.ECOS)
+                prob.solve(solver=cp.ECOS, warm_start=True)
             except SolverError:  # try a second solver
-                prob.solve(solver=cp.SCS)
+                prob.solve(solver=cp.SCS, warm_start=True)
             except SolverError:  # give up
                 print('Both ECOS and SCS failed.')
                 return 0
@@ -186,9 +186,9 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lambd_values):
         for ct_v, v in enumerate(new_range):
             lambd.value = v
             try:
-                prob.solve(solver=cp.ECOS)
+                prob.solve(solver=cp.ECOS, warm_start=True)
             except SolverError:  # try a second solver
-                prob.solve(solver=cp.SCS)
+                prob.solve(solver=cp.SCS, warm_start=True)
             except SolverError:  # give up
                 print('Both ECOS and SCS failed.')
                 return 0
@@ -203,9 +203,9 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lambd_values):
     lambd.value = best_lambda
 
     try:
-        prob.solve(solver=cp.ECOS)
+        prob.solve(solver=cp.ECOS, warm_start=True)
     except SolverError:  # try a second solver
-        prob.solve(solver=cp.SCS)
+        prob.solve(solver=cp.SCS, warm_start=True)
     except SolverError:  # give up
         print('Both ECOS and SCS failed.')
         return 0
@@ -370,7 +370,7 @@ def fit_linear_QR(X, data, tau, constraint, q):
     prob = cp.Problem(objective,
                       [A@z == b, G@z <= h])
 
-    prob.solve(solver=cp.ECOS)
+    prob.solve(solver=cp.ECOS, warm_start=True)
 
     beta = np.array(z.value[0:K] - z.value[K:2*K])
     yhat = np.dot(X, beta)
