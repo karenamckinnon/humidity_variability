@@ -438,7 +438,7 @@ def calc_SIC(beta, yhat, data, tau, delta, G, thresh=1e-4):
     p_lambda += 2  # intercept and slope
 
     u = data - yhat
-    rho = u*(tau*(u > 0).astype(float) - (1 - tau)*(u < 0).astype(float))
+    rho = u*(tau - (u < 0).astype(float))
 
     SIC = np.log(1/N*np.sum(rho)) + 1/(2*N)*p_lambda*np.log(N)
 
