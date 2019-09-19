@@ -126,7 +126,7 @@ if __name__ == '__main__':
                 print(e)
 
             # Save!
-            savename = '%s/%s_params.npz' % (paramdir, this_file)
+            savename = '%s/%s_lambda_params.npz' % (paramdir, this_file)
             np.savez(savename,
                      BETA=BETA,
                      lambd=lambd,

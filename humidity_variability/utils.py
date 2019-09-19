@@ -441,6 +441,6 @@ def calc_SIC(beta, yhat, data, tau, delta, G, thresh=1e-4):
     rho = u*(tau - (u < 0).astype(float))
 
     # https://www.tandfonline.com/doi/pdf/10.1080/01621459.2013.836975?needAccess=true
-    SIC = np.log(np.sum(rho)) + np.log(N)/(2*N)*p_lambda*np.log(len(beta))
+    SIC = np.log(np.sum(rho)) + np.log(N)/(2*N)*p_lambda*np.log(p_lambda)
 
     return SIC
