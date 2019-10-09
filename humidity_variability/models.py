@@ -2,7 +2,7 @@ import numpy as np
 import cvxpy as cp
 from scipy import sparse
 from cvxpy import SolverError
-from humidity_variability.utils import calc_SIC
+from humidity_variability.utils import calc_BIC
 import time
 
 
@@ -39,7 +39,7 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lambd_values):
     yhat : numpy.ndarray
         Conditional values of predictand for a given quantile
     best_lambda : float
-        Selected value of lambda based on SIC.
+        Selected value of lambda based on BIC.
     """
 
     N, K = X.shape
@@ -157,7 +157,7 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lambd_values):
     if (isinstance(lambd_values, float) | isinstance(lambd_values, int)):
         best_lambda = lambd_values  # forcing a single value of lambda
     else:
-        SIC = np.empty((len(lambd_values)))
+        BIC = np.empty((len(lambd_values)))
         for ct_v, v in enumerate(lambd_values):
             lambd.value = v
 
@@ -172,16 +172,18 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lambd_values):
             beta = np.array(z.value[0:K] - z.value[K:2*K])
             yhat = np.dot(X, beta)
 
-            SIC[ct_v] = calc_SIC(beta, yhat, data, tau, delta, X[:, 1])
+            BIC[ct_v], df = calc_BIC(beta, yhat, data, tau, delta, X[:, 1])
+            if df > np.sqrt(len(data)):  # violating constraint of high dim BIC
+                BIC[ct_v] = 1e6  # something large
 
-        # Find two SIC values that span the minimum
-        min_idx = np.argmin(SIC)
+        # Find two BIC values that span the minimum
+        min_idx = np.argmin(BIC)
         new_idx = np.array([min_idx - 1, min_idx + 1])
         new_idx[new_idx < 0] = 0
-        new_idx[new_idx > (len(SIC) - 1)] = (len(SIC) - 1)
+        new_idx[new_idx > (len(BIC) - 1)] = (len(BIC) - 1)
         new_range = lambd_values[new_idx]
         new_range = np.logspace(np.log10(new_range[0]), np.log10(new_range[1]), 6)
-        SIC = np.empty((len(new_range)))
+        BIC = np.empty((len(new_range)))
 
         for ct_v, v in enumerate(new_range):
             lambd.value = v
@@ -196,9 +198,9 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lambd_values):
             beta = np.array(z.value[0:K] - z.value[K:2*K])
             yhat = np.dot(X, beta)
 
-            SIC[ct_v] = calc_SIC(beta, yhat, data, tau, delta, X[:, 1])
+            BIC[ct_v] = calc_BIC(beta, yhat, data, tau, delta, X[:, 1])
 
-        best_lambda = new_range[np.argmin(SIC)]
+        best_lambda = new_range[np.argmin(BIC)]
 
     lambd.value = best_lambda
 
