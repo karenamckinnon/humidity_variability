@@ -437,7 +437,7 @@ def calc_BIC(beta, yhat, data, tau, delta, G, thresh=1e-4):
     # df is the number of "active" parameters
     df = np.sum(np.abs(slope[1:] - slope[:-1]) > thresh) + 2  # changes in slope + end points
 
-    spline2 = beta[(2+N):]/G
+    spline2 = beta[(2+N):]
     slope = (spline2[1:] - spline2[:-1])/delta
     df += np.sum(np.abs(slope[1:] - slope[:-1]) > thresh) + 2  # changes in slope + end points
 
