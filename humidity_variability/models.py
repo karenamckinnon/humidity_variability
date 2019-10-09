@@ -198,7 +198,9 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lambd_values):
             beta = np.array(z.value[0:K] - z.value[K:2*K])
             yhat = np.dot(X, beta)
 
-            BIC[ct_v] = calc_BIC(beta, yhat, data, tau, delta, X[:, 1])
+            BIC[ct_v], df = calc_BIC(beta, yhat, data, tau, delta, X[:, 1])
+            if df > np.sqrt(len(data)):  # violating constraint of high dim BIC
+                BIC[ct_v] = 1e6  # something large
 
         best_lambda = new_range[np.argmin(BIC)]
 
