@@ -6,7 +6,7 @@ from humidity_variability.utils import calc_BIC
 import time
 
 
-def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lambd_values):
+def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_values):
     """Fit regularized spline regression to the data.
 
     The model is coded to be for:
@@ -26,9 +26,11 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lambd_values):
         Type of constraint to impose: 'None', 'Below', 'Above'.
         'Below' indicates no crossing of lower quantile (i.e. tau = 0.55 shouldn't cross tau = 0.5)
         'Above' indicates no crossing of upper quantile (i.e. tau = 0.45 shouldn't cross tau = 0.5)
-        'None' imposes no constraints, and should be used for estimating the median quantile.
+        'Median' imposes no constraints beyond Td < T.
     q : numpy.ndarray or None
         The fitted quantile not to be crossed (if constraint is not None)
+    T : numpy.ndarray
+        The value of temperature not to be exceeded
     lambd_values : numpy.ndarray or float
         The initial set of lambda values to try, or a single lambda value to use
 
@@ -127,25 +129,32 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lambd_values):
     n = A.shape[1]
 
     G1 = -1*sparse.eye(n)
-    if constraint == 'None':
-        n_constraints = 0
-        G = G1
-        del G1
+    if constraint == 'Median':
+        n_constraints = len(T)
+        G2 = sparse.hstack((X, -X, sparse.rand(N, 2*N + 4*(N - 1), density=0)))
+    elif constraint == 'Below':  # Need constraint with <= T AND above lower quantile
+        n_constraints = len(T) + len(q)
+        G2a = sparse.hstack((X, -X, sparse.rand(N, 2*N + 4*(N - 1), density=0)))
+        G2b = sparse.hstack((-X, X, sparse.rand(N, 2*N + 4*(N - 1), density=0)))
+        G2 = sparse.vstack((G2a, G2b))
+        del G2a, G2b
+    elif constraint == 'Above':  # just constrain to be below upper quantiles
+        n_constraints = len(q)
+        G2 = sparse.hstack((X, -X, sparse.rand(N, 2*N + 4*(N - 1), density=0)))
     else:
-        n_constraints = X.shape[0]
-        if constraint == 'Below':
-            G2 = sparse.hstack((-X, X, sparse.rand(N, 2*N + 4*(N - 1), density=0)))
-        elif constraint == 'Above':
-            G2 = sparse.hstack((X, -X, sparse.rand(N, 2*N + 4*(N - 1), density=0)))
+        raise NameError('Constraint must be Median, Above, or Below')
 
-        G = sparse.vstack((G1, G2))
-
+    G = sparse.vstack((G1, G2))
     G = cp.Constant(G)
 
     # Right hand side of inequality constraint
     h = np.zeros((n + n_constraints, ))
-    if constraint == 'Below':
-        h[n:] = -q
+    if constraint == 'Median':
+        h[n:] = T
+    elif constraint == 'Below':
+        c1 = len(T)
+        h[n:(n + c1)] = T
+        h[(n + c1):] = -q
     elif constraint == 'Above':
         h[n:] = q
 
@@ -220,7 +229,7 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, lambd_values):
     return beta, yhat, best_lambda
 
 
-def fit_interaction_model(qs, lambd_values, X, data, delta):
+def fit_interaction_model(qs, lambd_values, X, data, spline_x):
     """Fit all desired quantiles, ensuring non-crossing.
 
     Parameters
@@ -233,8 +242,8 @@ def fit_interaction_model(qs, lambd_values, X, data, delta):
         The design matrix
     data : numpy.ndarray
         The 1D variable being modeled
-    delta : numpy.ndarray
-        The dx for the regularized spline term(s)
+    spline_x : numpy.ndarray
+        The x coordinate for the splines
 
     Returns
     -------
@@ -243,6 +252,9 @@ def fit_interaction_model(qs, lambd_values, X, data, delta):
     lambd : numpy.ndarray
         The selected lambda for each quantile.
     """
+
+    # The dx for the regularized spline term(s)
+    delta = np.diff(spline_x)
 
     # Switch quantiles to integers to ensure matching
     qs_int = (100*qs).astype(int)
@@ -263,7 +275,8 @@ def fit_interaction_model(qs, lambd_values, X, data, delta):
     # Fit middle quantile
     print('Fitting quantile %02d' % start_q)
     t1 = time.time()
-    beta50, yhat50, this_lambd = fit_regularized_spline_QR(X, data, delta, start_q/100, 'None', None, lambd_values)
+    beta50, yhat50, this_lambd = fit_regularized_spline_QR(X, data, delta, start_q/100, 'Median',
+                                                           None, spline_x, lambd_values)
     BETA[:, qs_int == start_q] = beta50[:, np.newaxis]
     save_lambd[qs_int == start_q] = this_lambd
     dt = time.time() - t1
@@ -274,7 +287,8 @@ def fit_interaction_model(qs, lambd_values, X, data, delta):
     for this_q in pos_q:
         print('Fitting quantile %02d' % this_q)
         t1 = time.time()
-        beta, yhat, this_lambd = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Below', yhat, lambd_values)
+        beta, yhat, this_lambd = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Below',
+                                                           yhat, spline_x, lambd_values)
         BETA[:, qs_int == this_q] = beta[:, np.newaxis]
         save_lambd[qs_int == this_q] = this_lambd
         dt = time.time() - t1
@@ -285,7 +299,8 @@ def fit_interaction_model(qs, lambd_values, X, data, delta):
     for this_q in neg_q[::-1]:
         print('Fitting quantile %02d' % this_q)
         t1 = time.time()
-        beta, yhat, this_lambd = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Above', yhat, lambd_values)
+        beta, yhat, this_lambd = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Above',
+                                                           yhat, spline_x, lambd_values)
         BETA[:, qs_int == this_q] = beta[:, np.newaxis]
         save_lambd[qs_int == this_q] = this_lambd
         dt = time.time() - t1
