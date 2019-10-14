@@ -45,7 +45,8 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
     """
 
     N, K = X.shape
-    lambd = cp.Parameter(nonneg=True)
+    lambd1 = cp.Parameter(nonneg=True)
+    lambd2 = cp.Parameter(nonneg=True)
 
     diag_vec = 1/delta
     off_diag_1 = -1/delta[:-1] - 1/delta[1:]
@@ -80,8 +81,8 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
                         (1-tau)*np.repeat(1, N)))
 
     c = cp.hstack((c,
-                   lambd*np.repeat(1, 2*(N-1)),  # pos/neg second derivative of first spline term
-                   lambd*np.repeat(1, 2*(N-1))))  # pos/neg second derivative of second spline term
+                   lambd1*np.repeat(1, 2*(N-1)),  # pos/neg second derivative of first spline term
+                   lambd2*np.repeat(1, 2*(N-1))))  # pos/neg second derivative of second spline term
 
     # Equality constraint: Az = b
     # Constraint ensures that fitted quantile trend + residuals = predictand
@@ -163,12 +164,14 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
     prob = cp.Problem(objective,
                       [A@z == b, G@z <= h])
 
+    lambd2_scale = 2
     if (isinstance(lambd_values, float) | isinstance(lambd_values, int)):
         best_lambda = lambd_values  # forcing a single value of lambda
     else:
         BIC = np.empty((len(lambd_values)))
         for ct_v, v in enumerate(lambd_values):
-            lambd.value = v
+            lambd1.value = v
+            lambd2.value = lambd2_scale*v
 
             try:
                 prob.solve(solver=cp.ECOS, warm_start=True)
@@ -185,17 +188,19 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
             if df > np.sqrt(len(data)):  # violating constraint of high dim BIC
                 BIC[ct_v] = 1e6  # something large
 
-        # Find two BIC values that span the minimum
         min_idx = np.argmin(BIC)
         new_idx = np.array([min_idx - 1, min_idx + 1])
         new_idx[new_idx < 0] = 0
         new_idx[new_idx > (len(BIC) - 1)] = (len(BIC) - 1)
         new_range = lambd_values[new_idx]
-        new_range = np.logspace(np.log10(new_range[0]), np.log10(new_range[1]), 6)
+        print(new_range)
+        # new_range = np.logspace(np.log10(new_range[0]), np.log10(new_range[1]), 6)
+        new_range = np.linspace(new_range[0], new_range[1], 6)
         BIC = np.empty((len(new_range)))
-
+        df_save = np.empty((len(new_range)))
         for ct_v, v in enumerate(new_range):
-            lambd.value = v
+            lambd1.value = v
+            lambd2.value = lambd2_scale*v
             try:
                 prob.solve(solver=cp.ECOS, warm_start=True)
             except SolverError:  # try a second solver
@@ -211,9 +216,14 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
             if df > np.sqrt(len(data)):  # violating constraint of high dim BIC
                 BIC[ct_v] = 1e6  # something large
 
+            df_save[ct_v] = df
+
+        df_final = df_save[np.argmin(BIC)]
+        print('degrees of freedom of fit: %02d' % df_final)
         best_lambda = new_range[np.argmin(BIC)]
 
-    lambd.value = best_lambda
+    lambd1.value = best_lambda
+    lambd2.value = lambd2_scale*best_lambda
 
     try:
         prob.solve(solver=cp.ECOS, warm_start=True)
