@@ -17,7 +17,8 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     lambd_values = np.logspace(0, 2, 10)
-    qs = np.array([0.05, 0.5, 0.95])
+    # qs = np.array([0.05, 0.5, 0.95])
+    qs = np.arange(0.05, 1, 0.05)
     qs_int = (100*qs).astype(int)
     N = 500
     output_dir = '/home/mckinnon/bucket/environmetrics/output'

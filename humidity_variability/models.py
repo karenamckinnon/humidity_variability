@@ -166,7 +166,9 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
 
     lambd2_scale = 1
     if (isinstance(lambd_values, float) | isinstance(lambd_values, int)):
-        best_lambda = lambd_values  # forcing a single value of lambda
+        lambd1.value = lambd_values
+        lambd2.value = lambd2_scale*lambd_values
+        best_lambda = lambd_values
     else:
         BIC = np.empty((len(lambd_values)))
         for ct_v, v in enumerate(lambd_values):
@@ -294,7 +296,7 @@ def fit_interaction_model(qs, lambd_values, lambd_type, X, data, spline_x):
     if lambd_type == 'Test':
         lambd_use = lambd_values
     elif lambd_type == 'Fixed':
-        lambd_use = lambd_values[qs_int == start_q]
+        lambd_use = lambd_values[qs_int == start_q][0]
 
     beta50, yhat50, this_lambd = fit_regularized_spline_QR(X, data, delta, start_q/100, 'Median',
                                                            None, spline_x, lambd_use)
@@ -311,7 +313,7 @@ def fit_interaction_model(qs, lambd_values, lambd_type, X, data, spline_x):
         if lambd_type == 'Test':
             lambd_use = lambd_values
         elif lambd_type == 'Fixed':
-            lambd_use = lambd_values[qs_int == this_q]
+            lambd_use = lambd_values[qs_int == this_q][0]
 
         beta, yhat, this_lambd = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Below',
                                                            yhat, spline_x, lambd_use)
@@ -328,7 +330,7 @@ def fit_interaction_model(qs, lambd_values, lambd_type, X, data, spline_x):
         if lambd_type == 'Test':
             lambd_use = lambd_values
         elif lambd_type == 'Fixed':
-            lambd_use = lambd_values[qs_int == this_q]
+            lambd_use = lambd_values[qs_int == this_q][0]
 
         beta, yhat, this_lambd = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Above',
                                                            yhat, spline_x, lambd_use)
