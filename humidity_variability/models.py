@@ -131,9 +131,7 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
 
     G1 = -1*sparse.eye(n)
     if constraint == 'Median':
-#        n_constraints = len(T)
-#        G2 = sparse.hstack((X, -X, sparse.rand(N, 2*N + 4*(N - 1), density=0)))
-        n_constraints = 0
+        n_constraints = 0  # Median is far enough from the Td < T constraint that we don't need to add it
         G = G1
         del G1
     elif constraint == 'Below':  # Need constraint with <= T AND above lower quantile
@@ -241,7 +239,7 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
     return beta, yhat, best_lambda
 
 
-def fit_interaction_model(qs, lambd_values, X, data, spline_x):
+def fit_interaction_model(qs, lambd_values, lambd_type, X, data, spline_x):
     """Fit all desired quantiles, ensuring non-crossing.
 
     Parameters
@@ -249,7 +247,10 @@ def fit_interaction_model(qs, lambd_values, X, data, spline_x):
     qs : numpy.ndarray
         The set of quantiles (0, 1) to be fit.
     lambd_values : numpy.ndarray
-        The initial set of lambda values to try.
+        The initial set of lambda values to try, or desired lambdas for each quantile.
+    lambd_type : str
+        Specify 'Test' to find best lambda, 'Fixed' to use the specified lambdas
+        Note that, if 'Fixed', len(qs) = len(lambd_values)
     X : numpy.ndarray
         The design matrix
     data : numpy.ndarray
@@ -264,6 +265,9 @@ def fit_interaction_model(qs, lambd_values, X, data, spline_x):
     lambd : numpy.ndarray
         The selected lambda for each quantile.
     """
+
+    if lambd_type == 'Fixed':
+        assert len(qs) == len(lambd_values)
 
     # The dx for the regularized spline term(s)
     delta = np.diff(spline_x)
@@ -287,8 +291,13 @@ def fit_interaction_model(qs, lambd_values, X, data, spline_x):
     # Fit middle quantile
     print('Fitting quantile %02d' % start_q)
     t1 = time.time()
+    if lambd_type == 'Test':
+        lambd_use = lambd_values
+    elif lambd_type == 'Fixed':
+        lambd_use = lambd_values[qs_int == start_q]
+
     beta50, yhat50, this_lambd = fit_regularized_spline_QR(X, data, delta, start_q/100, 'Median',
-                                                           None, spline_x, lambd_values)
+                                                           None, spline_x, lambd_use)
     BETA[:, qs_int == start_q] = beta50[:, np.newaxis]
     save_lambd[qs_int == start_q] = this_lambd
     dt = time.time() - t1
@@ -299,8 +308,13 @@ def fit_interaction_model(qs, lambd_values, X, data, spline_x):
     for this_q in pos_q:
         print('Fitting quantile %02d' % this_q)
         t1 = time.time()
+        if lambd_type == 'Test':
+            lambd_use = lambd_values
+        elif lambd_type == 'Fixed':
+            lambd_use = lambd_values[qs_int == this_q]
+
         beta, yhat, this_lambd = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Below',
-                                                           yhat, spline_x, lambd_values)
+                                                           yhat, spline_x, lambd_use)
         BETA[:, qs_int == this_q] = beta[:, np.newaxis]
         save_lambd[qs_int == this_q] = this_lambd
         dt = time.time() - t1
@@ -311,8 +325,13 @@ def fit_interaction_model(qs, lambd_values, X, data, spline_x):
     for this_q in neg_q[::-1]:
         print('Fitting quantile %02d' % this_q)
         t1 = time.time()
+        if lambd_type == 'Test':
+            lambd_use = lambd_values
+        elif lambd_type == 'Fixed':
+            lambd_use = lambd_values[qs_int == this_q]
+
         beta, yhat, this_lambd = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Above',
-                                                           yhat, spline_x, lambd_values)
+                                                           yhat, spline_x, lambd_use)
         BETA[:, qs_int == this_q] = beta[:, np.newaxis]
         save_lambd[qs_int == this_q] = this_lambd
         dt = time.time() - t1
