@@ -5,7 +5,7 @@ from humidity_variability.models import fit_interaction_model
 
 
 # Functions for creating Environmetrics figures
-def generate_case(case_number, seed):
+def generate_case(case_number, seed, qs):
     """Create synthetic data for a given case number.
 
     Parameters
@@ -64,7 +64,6 @@ def generate_case(case_number, seed):
         scale_fac = 0.04
         shape = 4
         epsilon = np.array([np.random.gamma(shape=shape, scale=scale_fac*this_T) for this_T in T])
-        qs = np.array([0.05, 0.5, 0.95])
 
         Tvec = np.linspace(np.min(T), np.max(T), 100)
         inv_cdf_early = np.array([stats.gamma.ppf(qs, shape, scale=scale_fac*this_T) for this_T in Tvec])
@@ -89,7 +88,6 @@ def generate_case(case_number, seed):
         scale_fac = 0.04
         shape = 4
         epsilon = np.array([np.random.gamma(shape=shape, scale=scale_fac*this_T**1.5) for this_T in T])
-        qs = np.array([0.05, 0.5, 0.95])
 
         Tvec = np.linspace(np.min(T), np.max(T), 100)
         inv_cdf_early = np.array([stats.gamma.ppf(qs, shape, scale=scale_fac*this_T**1.5) for this_T in Tvec])
@@ -184,7 +182,7 @@ def fit_case(case_number, qs, lambd_values, N, output_dir):
     initial_seed = 123
 
     # generate data for first fit
-    T, Td, G, _, _, _ = generate_case(case_number, initial_seed)
+    T, Td, G, _, _, _ = generate_case(case_number, initial_seed, qs)
 
     # Fit model
     df = pd.DataFrame(data={'G': G,
@@ -214,7 +212,7 @@ def fit_case(case_number, qs, lambd_values, N, output_dir):
     for kk in range(1, N):
 
         # generate new data
-        T, Td, G, _, _, _ = generate_case(case_number, initial_seed + kk)
+        T, Td, G, _, _, _ = generate_case(case_number, initial_seed + kk, qs)
 
         # Fit model
         df = pd.DataFrame(data={'G': G,
