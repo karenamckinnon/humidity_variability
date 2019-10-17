@@ -131,28 +131,30 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
 
     G1 = -1*sparse.eye(n)
     if constraint == 'Median':
-        n_constraints = len(T)
-        G2 = sparse.hstack((X, -X, sparse.rand(N, 2*N + 4*(N - 1), density=0)))
+#        n_constraints = len(T)
+#        G2 = sparse.hstack((X, -X, sparse.rand(N, 2*N + 4*(N - 1), density=0)))
+        n_constraints = 0
+        G = G1
+        del G1
     elif constraint == 'Below':  # Need constraint with <= T AND above lower quantile
         n_constraints = len(T) + len(q)
         G2a = sparse.hstack((X, -X, sparse.rand(N, 2*N + 4*(N - 1), density=0)))
         G2b = sparse.hstack((-X, X, sparse.rand(N, 2*N + 4*(N - 1), density=0)))
         G2 = sparse.vstack((G2a, G2b))
         del G2a, G2b
+        G = sparse.vstack((G1, G2))
     elif constraint == 'Above':  # just constrain to be below upper quantiles
         n_constraints = len(q)
         G2 = sparse.hstack((X, -X, sparse.rand(N, 2*N + 4*(N - 1), density=0)))
+        G = sparse.vstack((G1, G2))
     else:
         raise NameError('Constraint must be Median, Above, or Below')
 
-    G = sparse.vstack((G1, G2))
     G = cp.Constant(G)
 
     # Right hand side of inequality constraint
     h = np.zeros((n + n_constraints, ))
-    if constraint == 'Median':
-        h[n:] = T
-    elif constraint == 'Below':
+    if constraint == 'Below':
         c1 = len(T)
         h[n:(n + c1)] = T
         h[(n + c1):] = -q
@@ -164,7 +166,7 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
     prob = cp.Problem(objective,
                       [A@z == b, G@z <= h])
 
-    lambd2_scale = 2
+    lambd2_scale = 1
     if (isinstance(lambd_values, float) | isinstance(lambd_values, int)):
         best_lambda = lambd_values  # forcing a single value of lambda
     else:
@@ -184,7 +186,7 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
             beta = np.array(z.value[0:K] - z.value[K:2*K])
             yhat = np.dot(X, beta)
 
-            BIC[ct_v], df = calc_BIC(beta, yhat, data, tau, delta, X[:, 1])
+            BIC[ct_v], df = calc_BIC(beta, yhat, data, tau, delta)
             if df > np.sqrt(len(data)):  # violating constraint of high dim BIC
                 BIC[ct_v] = 1e6  # something large
 
@@ -194,8 +196,8 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
         new_idx[new_idx > (len(BIC) - 1)] = (len(BIC) - 1)
         new_range = lambd_values[new_idx]
         print(new_range)
-        # new_range = np.logspace(np.log10(new_range[0]), np.log10(new_range[1]), 6)
-        new_range = np.linspace(new_range[0], new_range[1], 6)
+        new_range = np.logspace(np.log10(new_range[0]), np.log10(new_range[1]), 10)
+        # new_range = np.linspace(new_range[0], new_range[1], 6)
         BIC = np.empty((len(new_range)))
         df_save = np.empty((len(new_range)))
         for ct_v, v in enumerate(new_range):
@@ -212,7 +214,7 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
             beta = np.array(z.value[0:K] - z.value[K:2*K])
             yhat = np.dot(X, beta)
 
-            BIC[ct_v], df = calc_BIC(beta, yhat, data, tau, delta, X[:, 1])
+            BIC[ct_v], df = calc_BIC(beta, yhat, data, tau, delta)
             if df > np.sqrt(len(data)):  # violating constraint of high dim BIC
                 BIC[ct_v] = 1e6  # something large
 

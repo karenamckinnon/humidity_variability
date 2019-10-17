@@ -396,7 +396,7 @@ def mod_legendre(q):
     return bases
 
 
-def calc_BIC(beta, yhat, data, tau, delta, G, thresh=1e-4):
+def calc_BIC(beta, yhat, data, tau, delta, thresh=1e-3):
     """Calculate high-dimensional BIC for a given value of lambda.
 
     Note that this script is _specific_ to the model used in McKinnon and Poppick, in prep.
@@ -416,8 +416,6 @@ def calc_BIC(beta, yhat, data, tau, delta, G, thresh=1e-4):
         Quantile being fit
     delta : numpy.ndarray
         The difference between sequential temperature values
-    G : numpy.ndarray
-        The global mean temperature term.
     thresh : float
         Threshold of difference in slope at which point an active knot is identified
 
@@ -433,7 +431,6 @@ def calc_BIC(beta, yhat, data, tau, delta, G, thresh=1e-4):
 
     spline1 = beta[2:(2+N)]
     slope = (spline1[1:] - spline1[:-1])/delta
-    thresh = 1e-4
     # df is the number of "active" parameters
     df = np.sum(np.abs(slope[1:] - slope[:-1]) > thresh) + 2  # changes in slope + end points
 
@@ -449,6 +446,5 @@ def calc_BIC(beta, yhat, data, tau, delta, G, thresh=1e-4):
     rho = u*(tau - (u < 0).astype(float))
 
     C_n = np.log(p)
-    BIC = np.log(np.sum(rho)) + df*np.log(N)/(2*N)*C_n
-
+    BIC = np.log(np.mean(rho)) + df*np.log(N)/(2*N)*C_n
     return BIC, df
