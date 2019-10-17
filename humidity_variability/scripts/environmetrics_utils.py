@@ -178,7 +178,30 @@ def generate_case(case_number, seed, qs):
     return T, Td, G, Tvec, inv_cdf_early, inv_cdf_late
 
 
-def fit_case(case_number, qs, lambd_values, N, output_dir):
+def fit_case(case_number, qs, lambd_values, N, output_dir, resample_type='generative'):
+    """
+    Fit a given synthetic case with uncertainty estimation.
+
+    Parameters
+    ----------
+    case_number : int
+        Identifier of synthetic case (see McKinnon and Poppick, Environmetrics), 1-4
+    qs : numpy.ndarray
+        Quantiles to be fit, (0, 1)
+    lambd_values : numpy.ndarray
+        Set of lambda values to try
+    N : int
+        Number of samples for uncertainty
+    output_dir : str
+        Where to save output from each fit
+    resample_type : str
+        Either 'generative' or 'bootstrap'
+
+    Returns
+    -------
+    Nothing. Output saved to output directory.
+    """
+
     initial_seed = 123
 
     # generate data for first fit
@@ -208,30 +231,70 @@ def fit_case(case_number, qs, lambd_values, N, output_dir):
     savename = '%s/case_%02d_lambda.npy' % (output_dir, case_number)
     np.save(savename, best_lam)
 
-    # Fit model N more times using these values of lambda
-    for kk in range(1, N):
+    if resample_type == 'generative':
+        # Fit model N more times using these values of lambda
+        for kk in range(1, N):
 
-        # generate new data
-        T, Td, G, _, _, _ = generate_case(case_number, initial_seed + kk, qs)
+            # generate new data
+            T, Td, G, _, _, _ = generate_case(case_number, initial_seed + kk, qs)
 
-        # Fit model
-        df = pd.DataFrame(data={'G': G,
-                                'T': T,
-                                'Td': Td})
-        df = df.sort_values('T')
+            # Fit model
+            df = pd.DataFrame(data={'G': G,
+                                    'T': T,
+                                    'Td': Td})
+            df = df.sort_values('T')
 
-        # Create X, the design matrix
-        # Intercept, linear in GMT, knots at all data points for temperature, same times GMT
-        n = len(df)
-        ncols = 2 + 2*n
-        X = np.ones((n, ncols))
-        X[:, 1] = df['G'].values
-        X[:, 2:(2 + n)] = np.identity(n)
-        X[:, (2 + n):] = np.identity(n)*df['G'].values
+            # Create X, the design matrix
+            # Intercept, linear in GMT, knots at all data points for temperature, same times GMT
+            n = len(df)
+            ncols = 2 + 2*n
+            X = np.ones((n, ncols))
+            X[:, 1] = df['G'].values
+            X[:, 2:(2 + n)] = np.identity(n)
+            X[:, (2 + n):] = np.identity(n)*df['G'].values
 
-        BETA, _ = fit_interaction_model(qs, best_lam, 'Fixed', X, df['Td'].values, df['T'].values)
+            BETA, _ = fit_interaction_model(qs, best_lam, 'Fixed', X, df['Td'].values, df['T'].values)
 
-        savename = '%s/case_%02d_fit_%04d.npy' % (output_dir, case_number, kk)
-        np.save(savename, BETA)
+            savename = '%s/case_%02d_fit_%04d.npy' % (output_dir, case_number, kk)
+            np.save(savename, BETA)
+    elif resample_type == 'bootstrap':
+        # Regenerate initial data
+        T0, Td0, G0, _, _, _ = generate_case(case_number, initial_seed, qs)
+
+        # For examples, G is the same for a given year
+        nyrs = len(np.unique(G))
+        ndays_per_year = int(len(T0)/nyrs)
+        Tmat = np.reshape(T0, (nyrs, ndays_per_year))
+        Tdmat = np.reshape(Td0, (nyrs, ndays_per_year))
+        Gmat = np.reshape(G0, (nyrs, ndays_per_year))
+
+        for kk in range(1, N):
+            # Get new year indices
+            idx_boot = np.random.choice(np.arange(nyrs), nyrs)
+            Tboot = Tmat[idx_boot, :].flatten()
+            Tdboot = Tdmat[idx_boot, :].flatten()
+            Gboot = Gmat[idx_boot, :].flatten()
+
+            df = pd.DataFrame(data={'G': Gboot,
+                                    'T': Tboot,
+                                    'Td': Tdboot})
+            df = df.sort_values('T')
+
+            # Create X, the design matrix
+            # Intercept, linear in GMT, knots at all data points for temperature, same times GMT
+            n = len(df)
+            ncols = 2 + 2*n
+            X = np.ones((n, ncols))
+            X[:, 1] = df['G'].values
+            X[:, 2:(2 + n)] = np.identity(n)
+            X[:, (2 + n):] = np.identity(n)*df['G'].values
+
+            BETA, _ = fit_interaction_model(qs, best_lam, 'Fixed', X, df['Td'].values, df['T'].values)
+
+            savename = '%s/case_%02d_boot_%04d.npy' % (output_dir, case_number, kk)
+            np.save(savename, BETA)
+
+    else:
+        raise NameError('resample_type must be generative or bootstrap')
 
     return
