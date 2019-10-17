@@ -155,7 +155,7 @@ def generate_case(case_number, seed, qs):
 
         Tvec = np.linspace(np.min(T), np.max(T), 100)
 
-        inv_cdf_early = np.empty((len(Tvec), 3))
+        inv_cdf_early = np.empty((len(Tvec), len(qs)))
         for counter in range(len(Tvec)):
 
             if Tvec[counter] > np.percentile(T, 75):
@@ -164,7 +164,7 @@ def generate_case(case_number, seed, qs):
             else:
                 inv_cdf_early[counter, :] = stats.gamma.ppf(qs, shape, scale=scale)
 
-        inv_cdf_late = np.empty((len(Tvec), 3))
+        inv_cdf_late = np.empty((len(Tvec), len(qs)))
         for counter in range(len(Tvec)):
 
             if Tvec[counter] > np.percentile(T, 75):
