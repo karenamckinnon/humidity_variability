@@ -34,9 +34,9 @@ if __name__ == '__main__':
         cmd = 'mkdir -p %s' % paramdir
         check_call(cmd.split())
 
-    # Regularization parameters
-    lam1 = 2
-    lam2 = 2
+    # Set of regularization parameters to try
+    lambd_values = np.logspace(0, 2, 10)
+
     # Quantiles to be fit
     qs = np.arange(0.05, 1, 0.05)
 
@@ -92,23 +92,12 @@ if __name__ == '__main__':
             print(e)
             continue
 
-        # remove mean of GMT and T
-        muT = np.mean(df_use['temp_j'])
-        df_use = df_use.assign(temp_j=df_use['temp_j'] - muT)
+        # remove mean of GMT
         df_use = df_use.assign(GMT=df_use['GMT'] - np.mean(df_use['GMT']))
 
         if args.model == 'interaction':
-            # Initial set of lambda values to test
-            lambd_values = np.logspace(-2, 1, 10)
-
             # Sort data frame by temperature to allow us to minimize the second derivative of the T-Td relationship
             df_use = df_use.sort_values('temp_j')
-
-            # Calculate the step between each temperature value
-            delta = np.diff(df_use['temp_j'].values)
-
-            # Pull out the data to be modeled
-            data = df_use['dewp_j'].values
 
             # Create X, the design matrix
             # Intercept, linear in GMT, knots at all data points for temperature, same times GMT
@@ -121,16 +110,19 @@ if __name__ == '__main__':
 
             # Fit the model
             try:
-                BETA, lambd = fit_interaction_model(qs, lambd_values, X, data, delta)
+                BETA, lambd = fit_interaction_model(qs, lambd_values, 'Test', X,
+                                                    df['dewp_j'].values, df_use['temp_j'].values)
             except Exception as e:
                 print(e)
 
             # Save!
             savename = '%s/%s_lambda_params.npz' % (paramdir, this_file)
             np.savez(savename,
+                     T=df_use['temp_j'].values,
+                     Td=df_use['dewp_j'].values,
+                     G=df_use['GMT'].values,
                      BETA=BETA,
                      lambd=lambd,
-                     muT=muT,
                      window_use=window_use,
                      lat=metadata['lat'][counter],
                      lon=metadata['lon'][counter])
@@ -138,6 +130,7 @@ if __name__ == '__main__':
         elif args.model == 'linear':
             # Pull out the data to be modeled
             data = df_use['dewp_j'].values
+            muT = np.mean(df_use['temp_j'].values)
 
             # Create X, the design matrix
             # Intercept, linear in GMT
