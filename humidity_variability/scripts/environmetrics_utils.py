@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 from scipy import stats
@@ -204,59 +205,67 @@ def fit_case(case_number, qs, lambd_values, N, output_dir, resample_type='genera
 
     initial_seed = 123
 
-    # generate data for first fit
-    T, Td, G, _, _, _ = generate_case(case_number, initial_seed, qs)
+    savename_lambda = '%s/case_%02d_lambda.npy' % (output_dir, case_number)
+    if os.path.isfile(savename_lambda):
+        best_lam = np.load(savename_lambda)
+    else:  # fit lambda on first random set
 
-    # Fit model
-    df = pd.DataFrame(data={'G': G,
-                            'T': T,
-                            'Td': Td})
-    df = df.sort_values('T')
+        # generate data for first fit
+        T, Td, G, _, _, _ = generate_case(case_number, initial_seed, qs)
 
-    # Create X, the design matrix
-    # Intercept, linear in GMT, knots at all data points for temperature, same times GMT
-    n = len(df)
-    ncols = 2 + 2*n
-    X = np.ones((n, ncols))
-    X[:, 1] = df['G'].values
-    X[:, 2:(2 + n)] = np.identity(n)
-    X[:, (2 + n):] = np.identity(n)*df['G'].values
+        # Fit model
+        df = pd.DataFrame(data={'G': G,
+                                'T': T,
+                                'Td': Td})
+        df = df.sort_values('T')
 
-    BETA, best_lam = fit_interaction_model(qs, lambd_values, 'Test', X, df['Td'].values, df['T'].values)
+        # Create X, the design matrix
+        # Intercept, linear in GMT, knots at all data points for temperature, same times GMT
+        n = len(df)
+        ncols = 2 + 2*n
+        X = np.ones((n, ncols))
+        X[:, 1] = df['G'].values
+        X[:, 2:(2 + n)] = np.identity(n)
+        X[:, (2 + n):] = np.identity(n)*df['G'].values
 
-    # Save output
-    savename = '%s/case_%02d_fit_%04d.npy' % (output_dir, case_number, 0)
-    np.save(savename, BETA)
+        BETA, best_lam = fit_interaction_model(qs, lambd_values, 'Test', X, df['Td'].values, df['T'].values)
 
-    savename = '%s/case_%02d_lambda.npy' % (output_dir, case_number)
-    np.save(savename, best_lam)
+        # Save output
+        savename = '%s/case_%02d_fit_%04d.npy' % (output_dir, case_number, 0)
+        np.save(savename, BETA)
+
+        savename = '%s/case_%02d_lambda.npy' % (output_dir, case_number)
+        np.save(savename, best_lam)
 
     if resample_type == 'generative':
         # Fit model N more times using these values of lambda
         for kk in range(1, N):
 
-            # generate new data
-            T, Td, G, _, _, _ = generate_case(case_number, initial_seed + kk, qs)
-
-            # Fit model
-            df = pd.DataFrame(data={'G': G,
-                                    'T': T,
-                                    'Td': Td})
-            df = df.sort_values('T')
-
-            # Create X, the design matrix
-            # Intercept, linear in GMT, knots at all data points for temperature, same times GMT
-            n = len(df)
-            ncols = 2 + 2*n
-            X = np.ones((n, ncols))
-            X[:, 1] = df['G'].values
-            X[:, 2:(2 + n)] = np.identity(n)
-            X[:, (2 + n):] = np.identity(n)*df['G'].values
-
-            BETA, _ = fit_interaction_model(qs, best_lam, 'Fixed', X, df['Td'].values, df['T'].values)
-
             savename = '%s/case_%02d_fit_%04d.npy' % (output_dir, case_number, kk)
-            np.save(savename, BETA)
+            if not os.path.isfile(savename):  # check if already ran
+
+                # generate new data
+                T, Td, G, _, _, _ = generate_case(case_number, initial_seed + kk, qs)
+
+                # Fit model
+                df = pd.DataFrame(data={'G': G,
+                                        'T': T,
+                                        'Td': Td})
+                df = df.sort_values('T')
+
+                # Create X, the design matrix
+                # Intercept, linear in GMT, knots at all data points for temperature, same times GMT
+                n = len(df)
+                ncols = 2 + 2*n
+                X = np.ones((n, ncols))
+                X[:, 1] = df['G'].values
+                X[:, 2:(2 + n)] = np.identity(n)
+                X[:, (2 + n):] = np.identity(n)*df['G'].values
+                try:
+                    BETA, _ = fit_interaction_model(qs, best_lam, 'Fixed', X, df['Td'].values, df['T'].values)
+                except TypeError:  # if model fit fails (happens rarely)
+                    continue
+                np.save(savename, BETA)
     elif resample_type == 'bootstrap':
         # Regenerate initial data
         T0, Td0, G0, _, _, _ = generate_case(case_number, initial_seed, qs)
@@ -274,6 +283,11 @@ def fit_case(case_number, qs, lambd_values, N, output_dir, resample_type='genera
             Tboot = Tmat[idx_boot, :].flatten()
             Tdboot = Tdmat[idx_boot, :].flatten()
             Gboot = Gmat[idx_boot, :].flatten()
+
+            # Add a small amount of noise so that data is not duplicated
+            # This can also be interpreted as the jitter required for the actual data: using 1F
+            Tboot += 5/9*np.random.rand(len(Tboot)) - 5/16
+            Tdboot += 5/9*np.random.rand(len(Tdboot)) - 5/16
 
             df = pd.DataFrame(data={'G': Gboot,
                                     'T': Tboot,
