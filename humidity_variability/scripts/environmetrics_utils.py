@@ -271,42 +271,45 @@ def fit_case(case_number, qs, lambd_values, N, output_dir, resample_type='genera
         T0, Td0, G0, _, _, _ = generate_case(case_number, initial_seed, qs)
 
         # For examples, G is the same for a given year
-        nyrs = len(np.unique(G))
+        nyrs = len(np.unique(G0))
         ndays_per_year = int(len(T0)/nyrs)
         Tmat = np.reshape(T0, (nyrs, ndays_per_year))
         Tdmat = np.reshape(Td0, (nyrs, ndays_per_year))
         Gmat = np.reshape(G0, (nyrs, ndays_per_year))
 
         for kk in range(1, N):
-            # Get new year indices
-            idx_boot = np.random.choice(np.arange(nyrs), nyrs)
-            Tboot = Tmat[idx_boot, :].flatten()
-            Tdboot = Tdmat[idx_boot, :].flatten()
-            Gboot = Gmat[idx_boot, :].flatten()
+            savename = '%s/case_%02d_boot_%04d.npz' % (output_dir, case_number, kk)
+            if not os.path.isfile(savename):  # check if already ran
+                # Get new year indices
+                idx_boot = np.random.choice(np.arange(nyrs), nyrs)
+                Tboot = Tmat[idx_boot, :].flatten()
+                Tdboot = Tdmat[idx_boot, :].flatten()
+                Gboot = Gmat[idx_boot, :].flatten()
 
-            # Add a small amount of noise so that data is not duplicated
-            # This can also be interpreted as the jitter required for the actual data: using 1F
-            Tboot += 5/9*np.random.rand(len(Tboot)) - 5/16
-            Tdboot += 5/9*np.random.rand(len(Tdboot)) - 5/16
+                # Add a small amount of noise so that data is not duplicated
+                # This can also be interpreted as the jitter required for the actual data: using 1F
+                Tboot += 5/9*np.random.rand(len(Tboot)) - 5/16
+                Tdboot += 5/9*np.random.rand(len(Tdboot)) - 5/16
 
-            df = pd.DataFrame(data={'G': Gboot,
-                                    'T': Tboot,
-                                    'Td': Tdboot})
-            df = df.sort_values('T')
+                df = pd.DataFrame(data={'G': Gboot,
+                                        'T': Tboot,
+                                        'Td': Tdboot})
+                df = df.sort_values('T')
 
-            # Create X, the design matrix
-            # Intercept, linear in GMT, knots at all data points for temperature, same times GMT
-            n = len(df)
-            ncols = 2 + 2*n
-            X = np.ones((n, ncols))
-            X[:, 1] = df['G'].values
-            X[:, 2:(2 + n)] = np.identity(n)
-            X[:, (2 + n):] = np.identity(n)*df['G'].values
+                # Create X, the design matrix
+                # Intercept, linear in GMT, knots at all data points for temperature, same times GMT
+                n = len(df)
+                ncols = 2 + 2*n
+                X = np.ones((n, ncols))
+                X[:, 1] = df['G'].values
+                X[:, 2:(2 + n)] = np.identity(n)
+                X[:, (2 + n):] = np.identity(n)*df['G'].values
 
-            BETA, _ = fit_interaction_model(qs, best_lam, 'Fixed', X, df['Td'].values, df['T'].values)
-
-            savename = '%s/case_%02d_boot_%04d.npy' % (output_dir, case_number, kk)
-            np.save(savename, BETA)
+                try:
+                    BETA, _ = fit_interaction_model(qs, best_lam, 'Fixed', X, df['Td'].values, df['T'].values)
+                except TypeError:  # if model fit fails (one problem station)
+                    continue
+                np.savez(savename, BETA=BETA, T=df['T'].values)  # need to save T as well to compare splines later
 
     else:
         raise NameError('resample_type must be generative or bootstrap')
