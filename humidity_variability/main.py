@@ -69,6 +69,10 @@ if __name__ == '__main__':
         this_file = metadata['station_id'][counter]
         print(this_file)
 
+        savename = '%s/%s_%s_params.npz' % (paramdir, args.model, this_file)
+        if os.path.isfile(savename):
+            continue
+
         start_date = pd.datetime.strptime(metadata['begin'][counter], '%Y-%m-%d')
         end_date = pd.datetime.strptime(metadata['end'][counter], '%Y-%m-%d')
 
@@ -107,16 +111,15 @@ if __name__ == '__main__':
             X[:, 1] = df_use['GMT'].values
             X[:, 2:(2 + n)] = np.identity(n)
             X[:, (2 + n):] = np.identity(n)*df_use['GMT'].values
-
             # Fit the model
             try:
                 BETA, lambd = fit_interaction_model(qs, lambd_values, 'Test', X,
-                                                    df['dewp_j'].values, df_use['temp_j'].values)
+                                                    df_use['dewp_j'].values, df_use['temp_j'].values)
             except Exception as e:
-                print(e)
+                print(str(e))
+                continue
 
             # Save!
-            savename = '%s/%s_lambda_params.npz' % (paramdir, this_file)
             np.savez(savename,
                      T=df_use['temp_j'].values,
                      Td=df_use['dewp_j'].values,
