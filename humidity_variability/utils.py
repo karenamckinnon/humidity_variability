@@ -386,12 +386,13 @@ def mod_legendre(q):
     P1 = 2*q - 1
     P2 = 0.5*(3*P1**2 - 1)
     P3 = 0.5*(5*P1**3 - 3*P1)
+    P4 = 1/8*(35*P1**4 - 30*P1**2 + 3)
 
     # Limited correlation remains between P1 and P3 due to limited sampling
     # Orthogonalize using Gram-Schmidt for better interpretability
     P3_orth = P3 - np.dot(P3, P1)/np.dot(P1, P1)*P1
 
-    bases = np.vstack((P0, P1, P2, P3_orth))
+    bases = np.vstack((P0, P1, P2, P3_orth, P4))
 
     return bases
 
