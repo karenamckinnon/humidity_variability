@@ -195,11 +195,10 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
         new_idx[new_idx < 0] = 0
         new_idx[new_idx > (len(BIC) - 1)] = (len(BIC) - 1)
         new_range = lambd_values[new_idx]
-        print(new_range)
-        new_range = np.logspace(np.log10(new_range[0]), np.log10(new_range[1]), 10)
-        # new_range = np.linspace(new_range[0], new_range[1], 6)
+        delta_range = new_range[1] - new_range[0]
+        new_range = np.logspace(np.log10(new_range[0] + 0.1*delta_range), np.log10(new_range[1] - 0.1*delta_range), 6)
         BIC = np.empty((len(new_range)))
-        df_save = np.empty((len(new_range)))
+        # df_save = np.empty((len(new_range)))
         for ct_v, v in enumerate(new_range):
             lambd1.value = v
             lambd2.value = lambd2_scale*v
@@ -218,10 +217,9 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
             if df > np.sqrt(len(data)):  # violating constraint of high dim BIC
                 BIC[ct_v] = 1e6  # something large
 
-            df_save[ct_v] = df
+            # df_save[ct_v] = df
 
-        df_final = df_save[np.argmin(BIC)]
-        print('degrees of freedom of fit: %02d' % df_final)
+        # df_final = df_save[np.argmin(BIC)]
         best_lambda = new_range[np.argmin(BIC)]
 
     lambd1.value = best_lambda

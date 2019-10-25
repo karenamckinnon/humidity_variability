@@ -196,7 +196,7 @@ def fit_case(case_number, qs, lambd_values, N, output_dir, resample_type='genera
     output_dir : str
         Where to save output from each fit
     resample_type : str
-        Either 'generative' or 'bootstrap'
+        Either 'generative', 'bootstrap', or jitter
 
     Returns
     -------
@@ -287,9 +287,8 @@ def fit_case(case_number, qs, lambd_values, N, output_dir, resample_type='genera
                 Gboot = Gmat[idx_boot, :].flatten()
 
                 # Add a small amount of noise so that data is not duplicated
-                # This can also be interpreted as the jitter required for the actual data: using 1F
-                Tboot += 5/9*np.random.rand(len(Tboot)) - 5/16
-                Tdboot += 5/9*np.random.rand(len(Tdboot)) - 5/16
+                Tboot += 0.01*np.random.rand(len(Tboot))
+                Tdboot += 0.01*np.random.rand(len(Tdboot))
 
                 df = pd.DataFrame(data={'G': Gboot,
                                         'T': Tboot,
@@ -311,7 +310,39 @@ def fit_case(case_number, qs, lambd_values, N, output_dir, resample_type='genera
                     continue
                 np.savez(savename, BETA=BETA, T=df['T'].values)  # need to save T as well to compare splines later
 
+    elif resample_type == 'jitter':
+        # Regenerate initial data
+        T0, Td0, G0, _, _, _ = generate_case(case_number, initial_seed, qs)
+
+        for kk in range(1, N):
+            savename = '%s/case_%02d_jitter_%04d.npz' % (output_dir, case_number, kk)
+            if not os.path.isfile(savename):  # check if already ran
+                # Add jitter
+                # Normally distributed with mean 0, standard deviation of 0.08 deg C
+                # Based on averaging four values with a precision of 1F
+                T = T0 + 0.08*np.random.randn(len(T0))
+                Td = Td0 + 0.08*np.random.randn(len(T0))
+
+                df = pd.DataFrame(data={'G': G0,
+                                        'T': T,
+                                        'Td': Td})
+                df = df.sort_values('T')
+
+                # Create X, the design matrix
+                # Intercept, linear in GMT, knots at all data points for temperature, same times GMT
+                n = len(df)
+                ncols = 2 + 2*n
+                X = np.ones((n, ncols))
+                X[:, 1] = df['G'].values
+                X[:, 2:(2 + n)] = np.identity(n)
+                X[:, (2 + n):] = np.identity(n)*df['G'].values
+
+                try:
+                    BETA, _ = fit_interaction_model(qs, best_lam, 'Fixed', X, df['Td'].values, df['T'].values)
+                except TypeError:  # if model fit fails (one problem station)
+                    continue
+                np.savez(savename, BETA=BETA, T=df['T'].values)  # need to save T as well to compare splines later
     else:
-        raise NameError('resample_type must be generative or bootstrap')
+        raise NameError('resample_type must be generative, bootstrap, or jitter')
 
     return
