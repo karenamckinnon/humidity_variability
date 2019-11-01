@@ -2,6 +2,7 @@ import numpy as np
 from datetime import datetime
 import pandas as pd
 import observational_large_ensemble.utils as olens_utils
+from numpy.linalg import multi_dot
 from helpful_utilities.meteo import F_to_C
 
 
@@ -452,3 +453,31 @@ def calc_BIC(beta, yhat, data, tau, delta, thresh=1e-3):
     C_n = np.log(p)
     BIC = np.log(np.mean(rho)) + df*np.log(N)/(2*N)*C_n
     return BIC, df
+
+
+def project_and_smooth(bases, data):
+    """Project data onto a set of bases and return smoothed version.
+
+    Parameters
+    ----------
+    bases : numpy.ndarray
+        The set of bases for the projection (ndata x nbases)
+    data : numpy.ndarray
+        A vector containing the data to be smoothed (1d only)
+
+    Returns
+    -------
+    yhat : numpy.ndarray
+        The smoothed version of data (of the same size)
+    """
+
+    X = np.matrix(bases)
+    y = np.matrix(data).T
+
+    coeff = multi_dot((np.dot(X.T, X).I, X.T, y))
+    yhat = np.dot(X, coeff)
+
+    coeff = np.array(coeff)
+    yhat = np.array(yhat).flatten()
+
+    return yhat
