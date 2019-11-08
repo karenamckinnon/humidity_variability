@@ -321,6 +321,7 @@ def fit_case(case_number, qs, lambd_values, boot_start, nboot, output_dir, resam
 
         for kk in range(boot_start, (boot_start + nboot)):
             np.random.seed(kk)
+
             savename = '%s/case_%02d_jitter_%04d.npz' % (output_dir, case_number, kk)
             if not os.path.isfile(savename):  # check if already ran
                 # Add jitter

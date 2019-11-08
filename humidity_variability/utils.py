@@ -2,6 +2,7 @@ import numpy as np
 from datetime import datetime
 import pandas as pd
 import observational_large_ensemble.utils as olens_utils
+from numpy.linalg import multi_dot
 from helpful_utilities.meteo import F_to_C
 
 
@@ -386,12 +387,16 @@ def mod_legendre(q):
     P1 = 2*q - 1
     P2 = 0.5*(3*P1**2 - 1)
     P3 = 0.5*(5*P1**3 - 3*P1)
+    P4 = 1/8*(35*P1**4 - 30*P1**2 + 3)
+    P5 = 1/8*(63*P1**5 - 70*P1**3 + 15*P1)
 
     # Limited correlation remains between P1 and P3 due to limited sampling
     # Orthogonalize using Gram-Schmidt for better interpretability
     P3_orth = P3 - np.dot(P3, P1)/np.dot(P1, P1)*P1
+    P4_orth = P4 - np.dot(P4, P2)/np.dot(P2, P2)*P2
+    P5_orth = P5 - np.dot(P5, P1)/np.dot(P1, P1)*P1 - np.dot(P5, P3_orth)/np.dot(P3_orth, P3_orth)*P3_orth
 
-    bases = np.vstack((P0, P1, P2, P3_orth))
+    bases = np.vstack((P0, P1, P2, P3_orth, P4_orth, P5_orth))
 
     return bases
 
@@ -448,3 +453,31 @@ def calc_BIC(beta, yhat, data, tau, delta, thresh=1e-3):
     C_n = np.log(p)
     BIC = np.log(np.mean(rho)) + df*np.log(N)/(2*N)*C_n
     return BIC, df
+
+
+def project_and_smooth(bases, data):
+    """Project data onto a set of bases and return smoothed version.
+
+    Parameters
+    ----------
+    bases : numpy.ndarray
+        The set of bases for the projection (ndata x nbases)
+    data : numpy.ndarray
+        A vector containing the data to be smoothed (1d only)
+
+    Returns
+    -------
+    yhat : numpy.ndarray
+        The smoothed version of data (of the same size)
+    """
+
+    X = np.matrix(bases)
+    y = np.matrix(data).T
+
+    coeff = multi_dot((np.dot(X.T, X).I, X.T, y))
+    yhat = np.dot(X, coeff)
+
+    coeff = np.array(coeff)
+    yhat = np.array(yhat).flatten()
+
+    return yhat
