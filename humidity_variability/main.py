@@ -13,12 +13,12 @@ if __name__ == '__main__':
     parser.add_argument('this_proc', type=int, help='Processor number (zero-indexed) of nproc')
     parser.add_argument('nproc', type=int, help='Total number of processors being used.')
     parser.add_argument('model', type=str, help='Fit linear or interaction model.')
+    parser.add_argument('datadir', type=str, help='Full directory path to location of data hashes')
 
     args = parser.parse_args()
 
     # Model parameters
-    # TODO clean up / turn into args
-    datadir = '/home/mckinnon/bucket/gsod/'
+    datadir = args.datadir
 
     start_year = 1973
     end_year = 2018
@@ -35,7 +35,7 @@ if __name__ == '__main__':
         check_call(cmd.split())
 
     # Set of regularization parameters to try
-    lambd_values = np.logspace(0, 2, 10)
+    lambd_values = np.logspace(-1, 1, 10)
 
     # Quantiles to be fit
     qs = np.arange(0.05, 1, 0.05)
