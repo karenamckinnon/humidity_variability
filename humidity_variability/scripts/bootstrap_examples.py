@@ -11,9 +11,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('id_start', type=int, help='Station index to start with')
     parser.add_argument('n_id', type=int, help='Number of stations to run')
-    parser.add_argument('datadir', type=str, help='Full path to data')
     parser.add_argument('boot_start', type=int, help='Bootstrap index to start with')
     parser.add_argument('nboot', type=int, help='Number of samples')
+    parser.add_argument('datadir', type=str, help='Full path to data')
+    parser.add_argument('savedir', type=str, help='Full path to where output is saved')
     args = parser.parse_args()
 
     datadir = args.datadir
@@ -37,9 +38,10 @@ if __name__ == '__main__':
     # Are we analyzing the warm season?
     for_summer = 1
 
+    # FIXME, should be interactive, but different seeds on different types of machines
     query_hash = '2506838728791974695'
     paramdir = '%s/%s/params' % (datadir, query_hash)
-    savedir = '/glade/scratch/mckinnon/gsod_boot/%s' % query_hash
+    savedir = '%s/%s' % (args.savedir, query_hash)
 
     # Stations to be fit
     param_files = sorted(glob('%s/interaction_*_params.npz' % paramdir))
@@ -91,15 +93,6 @@ if __name__ == '__main__':
 
             # Sort
             new_df = new_df.sort_values('temp_j')
-
-    #         # Approach 2: just add measurement error
-    #         # Note that data coming out of 'gsod_preprocess' is already in deg C
-    #         new_df = df_use.copy()
-    #         new_df['temp_j'] += 0.08*np.random.randn(len(new_df))
-    #         new_df['dewp_j'] += 0.08*np.random.randn(len(new_df))
-    #
-    #         # Sort data frame by temperature to allow us to minimize the second derivative of the T-Td relationship
-    #         new_df = new_df.sort_values('temp_j')
 
             # Create X, the design matrix
             # Intercept, linear in GMT, knots at all data points for temperature, same times GMT
