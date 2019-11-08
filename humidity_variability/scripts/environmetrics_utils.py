@@ -86,12 +86,15 @@ def generate_case(case_number, seed, qs):
         G = np.repeat(G[:, np.newaxis], ndays_per_year, axis=-1)
         G = G.flatten()
 
-        scale_fac = 0.04
-        shape = 4
-        epsilon = np.array([np.random.gamma(shape=shape, scale=scale_fac*this_T**1.5) for this_T in T])
+        # scale_fac = 0.04
+        # shape = 4
+        # Also changed power from 1.5 to 2
+        scale_fac = 0.002
+        shape = 8
+        epsilon = np.array([np.random.gamma(shape=shape, scale=scale_fac*this_T**2) for this_T in T])
 
         Tvec = np.linspace(np.min(T), np.max(T), 100)
-        inv_cdf_early = np.array([stats.gamma.ppf(qs, shape, scale=scale_fac*this_T**1.5) for this_T in Tvec])
+        inv_cdf_early = np.array([stats.gamma.ppf(qs, shape, scale=scale_fac*this_T**2) for this_T in Tvec])
         inv_cdf_late = inv_cdf_early
 
     elif case_number == 3:
