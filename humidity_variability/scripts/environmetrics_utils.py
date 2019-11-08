@@ -179,7 +179,7 @@ def generate_case(case_number, seed, qs):
     return T, Td, G, Tvec, inv_cdf_early, inv_cdf_late
 
 
-def fit_case(case_number, qs, lambd_values, N, output_dir, resample_type='generative'):
+def fit_case(case_number, qs, lambd_values, boot_start, nboot, output_dir, resample_type='generative'):
     """
     Fit a given synthetic case with uncertainty estimation.
 
@@ -191,6 +191,10 @@ def fit_case(case_number, qs, lambd_values, N, output_dir, resample_type='genera
         Quantiles to be fit, (0, 1)
     lambd_values : numpy.ndarray
         Set of lambda values to try
+    boot_start : int
+        Index to start bootstrap at. Random seed is set to the bootstrap index for reproducibility.
+    nboot : int
+        Number of bootstrap samples to fit.
     N : int
         Number of samples for uncertainty
     output_dir : str
@@ -239,7 +243,7 @@ def fit_case(case_number, qs, lambd_values, N, output_dir, resample_type='genera
 
     if resample_type == 'generative':
         # Fit model N more times using these values of lambda
-        for kk in range(1, N):
+        for kk in range(boot_start, (boot_start + nboot)):
 
             savename = '%s/case_%02d_fit_%04d.npy' % (output_dir, case_number, kk)
             if not os.path.isfile(savename):  # check if already ran
@@ -277,7 +281,8 @@ def fit_case(case_number, qs, lambd_values, N, output_dir, resample_type='genera
         Tdmat = np.reshape(Td0, (nyrs, ndays_per_year))
         Gmat = np.reshape(G0, (nyrs, ndays_per_year))
 
-        for kk in range(1, N):
+        for kk in range(boot_start, (boot_start + nboot)):
+            np.random.seed(kk)
             savename = '%s/case_%02d_boot_%04d.npz' % (output_dir, case_number, kk)
             if not os.path.isfile(savename):  # check if already ran
                 # Get new year indices
@@ -314,7 +319,9 @@ def fit_case(case_number, qs, lambd_values, N, output_dir, resample_type='genera
         # Regenerate initial data
         T0, Td0, G0, _, _, _ = generate_case(case_number, initial_seed, qs)
 
-        for kk in range(1, N):
+        for kk in range(boot_start, (boot_start + nboot)):
+            np.random.seed(kk)
+
             savename = '%s/case_%02d_jitter_%04d.npz' % (output_dir, case_number, kk)
             if not os.path.isfile(savename):  # check if already ran
                 # Add jitter
