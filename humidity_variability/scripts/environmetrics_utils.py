@@ -295,8 +295,9 @@ def fit_case(case_number, qs, lambd_values, boot_start, nboot, output_dir, resam
                 Gboot = Gmat[idx_boot, :].flatten()
 
                 # Add a small amount of noise so that data is not duplicated
-                Tboot += 0.01*np.random.rand(len(Tboot))
-                Tdboot += 0.01*np.random.rand(len(Tdboot))
+                half_width = 0.005
+                Tboot += 2*half_width*np.random.rand(len(Tboot)) - half_width
+                Tdboot += 2*half_width*np.random.rand(len(Tdboot)) - half_width
 
                 df = pd.DataFrame(data={'G': Gboot,
                                         'T': Tboot,
