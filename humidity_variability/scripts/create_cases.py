@@ -1,5 +1,5 @@
 import numpy as np
-from humidity_variability.scripts.environmetrics_utils import fit_case
+from humidity_variability.scripts.case_utils import fit_case
 import argparse
 
 
