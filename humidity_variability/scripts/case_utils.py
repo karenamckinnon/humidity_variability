@@ -6,7 +6,7 @@ from humidity_variability.models import fit_interaction_model
 
 
 # Functions for creating Environmetrics figures
-def generate_case(case_number, seed, qs):
+def generate_case(case_number, seed, qs, rho):
     """Create synthetic data for a given case number.
 
     Parameters
@@ -15,6 +15,10 @@ def generate_case(case_number, seed, qs):
         Case number (1-4) to produce data for
     seed : int
         Random seed to produce random data
+    qs : numpy.array
+        Set of quantiles to calculate
+    rho : float
+        Within-season autocorrelation coefficient
 
     Returns
     -------
@@ -43,7 +47,6 @@ def generate_case(case_number, seed, qs):
     nyears = 50
     muT = 15
     stdT = 2
-    rho = 0.65
     std_innovations = np.sqrt((1 - rho**2)*stdT**2)
 
     if case_number == 1:
