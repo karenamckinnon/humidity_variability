@@ -223,7 +223,7 @@ def fit_case(case_number, qs, rho, lambd_values, boot_start, nboot, output_dir, 
 
     initial_seed = 123
 
-    savename_lambda = '%s/case_%02d_lambda.npy' % (output_dir, case_number)
+    savename_lambda = '%s/case_%02d_rho_%02d_lambda.npy' % (output_dir, case_number, 100*rho)
     if os.path.isfile(savename_lambda):
         best_lam = np.load(savename_lambda)
     else:  # fit lambda on first random set
@@ -249,17 +249,17 @@ def fit_case(case_number, qs, rho, lambd_values, boot_start, nboot, output_dir, 
         BETA, best_lam = fit_interaction_model(qs, lambd_values, 'Test', X, df['Td'].values, df['T'].values)
 
         # Save output
-        savename = '%s/case_%02d_fit_%04d.npy' % (output_dir, case_number, 0)
+        savename = '%s/case_%02d_rho_%02d_fit_%04d.npy' % (output_dir, case_number, 100*rho, 0)
         np.save(savename, BETA)
 
-        savename = '%s/case_%02d_lambda.npy' % (output_dir, case_number)
+        savename = '%s/case_%02d_rho_%02d_lambda.npy' % (output_dir, case_number, 100*rho)
         np.save(savename, best_lam)
 
     if resample_type == 'generative':
         # Fit model N more times using these values of lambda
         for kk in range(boot_start, (boot_start + nboot)):
 
-            savename = '%s/case_%02d_fit_%04d.npy' % (output_dir, case_number, kk)
+            savename = '%s/case_%02d_rho_%02d_fit_%04d.npy' % (output_dir, case_number, 100*rho, kk)
             if not os.path.isfile(savename):  # check if already ran
 
                 # generate new data
