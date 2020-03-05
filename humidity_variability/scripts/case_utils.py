@@ -185,7 +185,7 @@ def generate_case(case_number, seed, qs, rho):
     return T, Td, G, Tvec, inv_cdf_early, inv_cdf_late
 
 
-def fit_case(case_number, qs, lambd_values, boot_start, nboot, output_dir, resample_type='generative'):
+def fit_case(case_number, qs, rho, lambd_values, boot_start, nboot, output_dir, resample_type='generative'):
     """
     Fit a given synthetic case with uncertainty estimation.
 
@@ -195,6 +195,8 @@ def fit_case(case_number, qs, lambd_values, boot_start, nboot, output_dir, resam
         Identifier of synthetic case (see McKinnon and Poppick, Environmetrics), 1-4
     qs : numpy.ndarray
         Quantiles to be fit, (0, 1)
+    rho : float
+        Within-season autocorrelation coefficient
     lambd_values : numpy.ndarray
         Set of lambda values to try
     boot_start : int
@@ -221,7 +223,7 @@ def fit_case(case_number, qs, lambd_values, boot_start, nboot, output_dir, resam
     else:  # fit lambda on first random set
 
         # generate data for first fit
-        T, Td, G, _, _, _ = generate_case(case_number, initial_seed, qs)
+        T, Td, G, _, _, _ = generate_case(case_number, initial_seed, qs, rho)
 
         # Fit model
         df = pd.DataFrame(data={'G': G,
@@ -255,7 +257,7 @@ def fit_case(case_number, qs, lambd_values, boot_start, nboot, output_dir, resam
             if not os.path.isfile(savename):  # check if already ran
 
                 # generate new data
-                T, Td, G, _, _, _ = generate_case(case_number, initial_seed + kk, qs)
+                T, Td, G, _, _, _ = generate_case(case_number, initial_seed + kk, qs, rho)
 
                 # Fit model
                 df = pd.DataFrame(data={'G': G,
@@ -278,7 +280,7 @@ def fit_case(case_number, qs, lambd_values, boot_start, nboot, output_dir, resam
                 np.save(savename, BETA)
     elif resample_type == 'bootstrap':
         # Regenerate initial data
-        T0, Td0, G0, _, _, _ = generate_case(case_number, initial_seed, qs)
+        T0, Td0, G0, _, _, _ = generate_case(case_number, initial_seed, qs, rho)
 
         # For examples, G is the same for a given year
         nyrs = len(np.unique(G0))
@@ -324,7 +326,7 @@ def fit_case(case_number, qs, lambd_values, boot_start, nboot, output_dir, resam
 
     elif resample_type == 'jitter':
         # Regenerate initial data
-        T0, Td0, G0, _, _, _ = generate_case(case_number, initial_seed, qs)
+        T0, Td0, G0, _, _, _ = generate_case(case_number, initial_seed, qs, rho)
 
         for kk in range(boot_start, (boot_start + nboot)):
             np.random.seed(kk)
