@@ -43,7 +43,8 @@ def generate_case(case_number, seed, qs, rho):
         return 0
 
     # Standard across all cases
-    ndays_per_year = 60
+    ndays_per_season = 60
+    ndays_per_year = 365
     nyears = 50
     muT = 15
     stdT = 2
@@ -51,19 +52,20 @@ def generate_case(case_number, seed, qs, rho):
 
     if case_number == 1:
         deltaT = 2
-        G = np.linspace(-0.5, 0.5, nyears)
-        T = np.empty((nyears, ndays_per_year))
-        for ct1 in range(nyears):
-            tmp = np.empty((ndays_per_year, ))
-            tmp[0] = stdT*np.random.randn()
-            for ct2 in range(ndays_per_year - 1):
-                tmp[ct2 + 1] = rho*tmp[ct2] + std_innovations*np.random.randn()
-            tmp += muT + deltaT*G[ct1]
-            T[ct1, :] = tmp
-        T = T.flatten()
+        # GMTA anomaly as a function of day
+        G = np.linspace(-0.5, 0.5, nyears*ndays_per_year)
+        T = np.empty((nyears*ndays_per_year))
 
-        G = np.repeat(G[:, np.newaxis], ndays_per_year, axis=-1)
-        G = G.flatten()
+        T[0] = stdT*np.random.randn()
+        # make full time series
+        for ct in range(nyears*ndays_per_year - 1):
+            T[ct + 1] = rho*T[ct] + std_innovations*np.random.randn()
+        T += muT + deltaT*G
+
+        # Pull out "summer" only
+        idx = (np.arange(nyears*ndays_per_year) % ndays_per_year) < ndays_per_season
+        T = T[idx]
+        G = G[idx]
 
         scale_fac = 0.04
         shape = 4
@@ -75,19 +77,20 @@ def generate_case(case_number, seed, qs, rho):
 
     elif case_number == 2:
         deltaT = 2
-        G = np.linspace(-0.5, 0.5, nyears)
-        T = np.empty((nyears, ndays_per_year))
-        for ct1 in range(nyears):
-            tmp = np.empty((ndays_per_year, ))
-            tmp[0] = stdT*np.random.randn()
-            for ct2 in range(ndays_per_year - 1):
-                tmp[ct2 + 1] = rho*tmp[ct2] + std_innovations*np.random.randn()
-            tmp += muT + deltaT*G[ct1]
-            T[ct1, :] = tmp
-        T = T.flatten()
+        # GMTA anomaly as a function of day
+        G = np.linspace(-0.5, 0.5, nyears*ndays_per_year)
+        T = np.empty((nyears*ndays_per_year))
 
-        G = np.repeat(G[:, np.newaxis], ndays_per_year, axis=-1)
-        G = G.flatten()
+        T[0] = stdT*np.random.randn()
+        # make full time series
+        for ct in range(nyears*ndays_per_year - 1):
+            T[ct + 1] = rho*T[ct] + std_innovations*np.random.randn()
+        T += muT + deltaT*G
+
+        # Pull out "summer" only
+        idx = (np.arange(nyears*ndays_per_year) % ndays_per_year) < ndays_per_season
+        T = T[idx]
+        G = G[idx]
 
         # scale_fac = 0.04
         # shape = 4
@@ -103,19 +106,21 @@ def generate_case(case_number, seed, qs, rho):
     elif case_number == 3:
 
         deltaT = 0
-        G = np.linspace(-0.5, 0.5, nyears)
-        T = np.empty((nyears, ndays_per_year))
-        for ct1 in range(nyears):
-            tmp = np.empty((ndays_per_year, ))
-            tmp[0] = stdT*np.random.randn()
-            for ct2 in range(ndays_per_year - 1):
-                tmp[ct2 + 1] = rho*tmp[ct2] + std_innovations*np.random.randn()
-            tmp += muT + deltaT*G[ct1]
-            T[ct1, :] = tmp
-        T = T.flatten()
+        # GMTA anomaly as a function of day
+        G = np.linspace(-0.5, 0.5, nyears*ndays_per_year)
+        T = np.empty((nyears*ndays_per_year))
 
-        G = np.repeat(G[:, np.newaxis], ndays_per_year, axis=-1)
-        G = G.flatten()
+        T[0] = stdT*np.random.randn()
+        # make full time series
+        for ct in range(nyears*ndays_per_year - 1):
+            T[ct + 1] = rho*T[ct] + std_innovations*np.random.randn()
+        T += muT + deltaT*G
+
+        # Pull out "summer" only
+        idx = (np.arange(nyears*ndays_per_year) % ndays_per_year) < ndays_per_season
+        T = T[idx]
+        G = G[idx]
+
         scale = 2
         shape_fac = 5
         shape_predictor = G + 1
@@ -133,19 +138,20 @@ def generate_case(case_number, seed, qs, rho):
     elif case_number == 4:
 
         deltaT = 0
-        G = np.linspace(-0.5, 0.5, nyears)
-        T = np.empty((nyears, ndays_per_year))
-        for ct1 in range(nyears):
-            tmp = np.empty((ndays_per_year, ))
-            tmp[0] = stdT*np.random.randn()
-            for ct2 in range(ndays_per_year - 1):
-                tmp[ct2 + 1] = rho*tmp[ct2] + std_innovations*np.random.randn()
-            tmp += muT + deltaT*G[ct1]
-            T[ct1, :] = tmp
-        T = T.flatten()
+        # GMTA anomaly as a function of day
+        G = np.linspace(-0.5, 0.5, nyears*ndays_per_year)
+        T = np.empty((nyears*ndays_per_year))
 
-        G = np.repeat(G[:, np.newaxis], ndays_per_year, axis=-1)
-        G = G.flatten()
+        T[0] = stdT*np.random.randn()
+        # make full time series
+        for ct in range(nyears*ndays_per_year - 1):
+            T[ct + 1] = rho*T[ct] + std_innovations*np.random.randn()
+        T += muT + deltaT*G
+
+        # Pull out "summer" only
+        idx = (np.arange(nyears*ndays_per_year) % ndays_per_year) < ndays_per_season
+        T = T[idx]
+        G = G[idx]
 
         scale = 1
         shape = 4
