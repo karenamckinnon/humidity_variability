@@ -6,7 +6,7 @@ from humidity_variability.utils import calc_BIC
 import time
 
 
-def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_values):
+def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd1_values, lambd2_values):
     """Fit regularized spline regression to the data.
 
     The model is coded to be for:
@@ -31,8 +31,10 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
         The fitted quantile not to be crossed (if constraint is not None)
     T : numpy.ndarray
         The value of temperature not to be exceeded
-    lambd_values : numpy.ndarray or float
-        The initial set of lambda values to try, or a single lambda value to use
+    lambd1_values : numpy.ndarray or float
+        The initial set of lambda values to try for spline 1, or a single lambda value to use
+    lambd2_values : numpy.ndarray or float
+        The initial set of lambda values to try for spline 2, or a single lambda value to use
 
     Returns
     -------
@@ -40,8 +42,10 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
         Parameter coefficients for quantile regression model
     yhat : numpy.ndarray
         Conditional values of predictand for a given quantile
-    best_lambda : float
-        Selected value of lambda based on BIC.
+    best_lambda1 : float
+        Selected value of lambda1 based on BIC.
+    best_lambda2 : float
+        Selected value of lambda2 based on BIC.
     """
 
     N, K = X.shape
@@ -164,66 +168,42 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
     prob = cp.Problem(objective,
                       [A@z == b, G@z <= h])
 
-    lambd2_scale = 1
-    if (isinstance(lambd_values, float) | isinstance(lambd_values, int)):
-        lambd1.value = lambd_values
-        lambd2.value = lambd2_scale*lambd_values
-        best_lambda = lambd_values
-    else:
-        BIC = np.empty((len(lambd_values)))
-        for ct_v, v in enumerate(lambd_values):
-            lambd1.value = v
-            lambd2.value = lambd2_scale*v
+    # Case where lambda is set
+    if (isinstance(lambd1_values, float) | isinstance(lambd1_values, int)):
+        lambd1.value = lambd1_values
+        lambd2.value = lambd2_values
+        best_lambda1 = lambd1_values
+        best_lambda2 = lambd2_values
+    else:  # case where we are choosing lambda
+        BIC = np.empty((len(lambd1_values), len(lambd2_values)))
+        for ct_v1, v1 in enumerate(lambd1_values):
+            for ct_v2, v2 in enumerate(lambd2_values):
 
-            try:
-                prob.solve(solver=cp.ECOS, warm_start=True)
-            except SolverError:  # try a second solver
-                prob.solve(solver=cp.SCS, warm_start=True)
-            except SolverError:  # give up
-                print('Both ECOS and SCS failed.')
-                return 0
+                lambd1.value = v1
+                lambd2.value = v2
 
-            beta = np.array(z.value[0:K] - z.value[K:2*K])
-            yhat = np.dot(X, beta)
+                try:
+                    prob.solve(solver=cp.ECOS, warm_start=True)
+                except SolverError:  # try a second solver
+                    prob.solve(solver=cp.SCS, warm_start=True)
+                except SolverError:  # give up
+                    print('Both ECOS and SCS failed.')
+                    return 0
 
-            BIC[ct_v], df = calc_BIC(beta, yhat, data, tau, delta)
-            if df > np.sqrt(len(data)):  # violating constraint of high dim BIC
-                BIC[ct_v] = 1e6  # something large
+                beta = np.array(z.value[0:K] - z.value[K:2*K])
+                yhat = np.dot(X, beta)
 
-        min_idx = np.argmin(BIC)
-        new_idx = np.array([min_idx - 1, min_idx + 1])
-        new_idx[new_idx < 0] = 0
-        new_idx[new_idx > (len(BIC) - 1)] = (len(BIC) - 1)
-        new_range = lambd_values[new_idx]
-        delta_range = new_range[1] - new_range[0]
-        new_range = np.logspace(np.log10(new_range[0] + 0.1*delta_range), np.log10(new_range[1] - 0.1*delta_range), 6)
-        BIC = np.empty((len(new_range)))
-        # df_save = np.empty((len(new_range)))
-        for ct_v, v in enumerate(new_range):
-            lambd1.value = v
-            lambd2.value = lambd2_scale*v
-            try:
-                prob.solve(solver=cp.ECOS, warm_start=True)
-            except SolverError:  # try a second solver
-                prob.solve(solver=cp.SCS, warm_start=True)
-            except SolverError:  # give up
-                print('Both ECOS and SCS failed.')
-                return 0
+                BIC[ct_v1, ct_v2], df = calc_BIC(beta, yhat, data, tau, delta)
+                if df > np.sqrt(len(data)):  # violating constraint of high dim BIC
+                    BIC[ct_v1, ct_v2] = 1e6  # something large
 
-            beta = np.array(z.value[0:K] - z.value[K:2*K])
-            yhat = np.dot(X, beta)
+        # identify minimum BIC across all lambdas
+        min_idx = np.where(BIC == np.min(BIC))
+        best_lambda1 = lambd1_values[min_idx[0][0]]
+        best_lambda2 = lambd2_values[min_idx[1][0]]
 
-            BIC[ct_v], df = calc_BIC(beta, yhat, data, tau, delta)
-            if df > np.sqrt(len(data)):  # violating constraint of high dim BIC
-                BIC[ct_v] = 1e6  # something large
-
-            # df_save[ct_v] = df
-
-        # df_final = df_save[np.argmin(BIC)]
-        best_lambda = new_range[np.argmin(BIC)]
-
-    lambd1.value = best_lambda
-    lambd2.value = lambd2_scale*best_lambda
+    lambd1.value = best_lambda1
+    lambd2.value = best_lambda2
 
     try:
         prob.solve(solver=cp.ECOS, warm_start=True)
@@ -236,18 +216,20 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
     beta = np.array(z.value[0:K] - z.value[K:2*K])
     yhat = np.dot(X, beta)
 
-    return beta, yhat, best_lambda
+    return beta, yhat, best_lambda1, best_lambda2
 
 
-def fit_interaction_model(qs, lambd_values, lambd_type, X, data, spline_x):
+def fit_interaction_model(qs, lambd1_values, lambd2_values, lambd_type, X, data, spline_x):
     """Fit all desired quantiles, ensuring non-crossing.
 
     Parameters
     ----------
     qs : numpy.ndarray
         The set of quantiles (0, 1) to be fit.
-    lambd_values : numpy.ndarray
-        The initial set of lambda values to try, or desired lambdas for each quantile.
+    lambd1_values : numpy.ndarray
+        The initial set of lambda values to try for spline 1, or desired lambdas for each quantile.
+    lambd2_values : numpy.ndarray
+        The initial set of lambda values to try for spline 2, or desired lambdas for each quantile.
     lambd_type : str
         Specify 'Test' to find best lambda, 'Fixed' to use the specified lambdas
         Note that, if 'Fixed', len(qs) = len(lambd_values)
@@ -262,12 +244,15 @@ def fit_interaction_model(qs, lambd_values, lambd_type, X, data, spline_x):
     -------
     BETA : numpy.ndarray
         The parameter vector for all quantiles. There are (2 + 2*len(data)) parameters.
-    lambd : numpy.ndarray
-        The selected lambda for each quantile.
+    lambd1 : numpy.ndarray
+        The selected lambda for each quantile for spline 1.
+    lambd2 : numpy.ndarray
+        The selected lambda for each quantile for spline 2.
     """
 
     if lambd_type == 'Fixed':
-        assert len(qs) == len(lambd_values)
+        assert len(qs) == len(lambd1_values)
+        assert len(qs) == len(lambd2_values)
 
     # The dx for the regularized spline term(s)
     delta = np.diff(spline_x)
@@ -286,20 +271,24 @@ def fit_interaction_model(qs, lambd_values, lambd_type, X, data, spline_x):
     nq = len(qs_int)
 
     BETA = np.empty((nparams, nq))
-    save_lambd = np.empty((nq, ))
+    save_lambd1 = np.empty((nq, ))
+    save_lambd2 = np.empty((nq, ))
 
     # Fit middle quantile
     print('Fitting quantile %02d' % start_q)
     t1 = time.time()
     if lambd_type == 'Test':
-        lambd_use = lambd_values
+        lambd1_use = lambd1_values
+        lambd2_use = lambd2_values
     elif lambd_type == 'Fixed':
-        lambd_use = lambd_values[qs_int == start_q][0]
+        lambd1_use = lambd1_values[qs_int == start_q][0]
+        lambd2_use = lambd2_values[qs_int == start_q][0]
 
-    beta50, yhat50, this_lambd = fit_regularized_spline_QR(X, data, delta, start_q/100, 'Median',
-                                                           None, spline_x, lambd_use)
+    beta50, yhat50, this_lambd1, this_lambd2 = fit_regularized_spline_QR(X, data, delta, start_q/100, 'Median',
+                                                                         None, spline_x, lambd1_use, lambd2_use)
     BETA[:, qs_int == start_q] = beta50[:, np.newaxis]
-    save_lambd[qs_int == start_q] = this_lambd
+    save_lambd1[qs_int == start_q] = this_lambd1
+    save_lambd2[qs_int == start_q] = this_lambd2
     dt = time.time() - t1
     print('Time elapsed: %0.2f seconds' % dt)
 
@@ -309,14 +298,17 @@ def fit_interaction_model(qs, lambd_values, lambd_type, X, data, spline_x):
         print('Fitting quantile %02d' % this_q)
         t1 = time.time()
         if lambd_type == 'Test':
-            lambd_use = lambd_values
+            lambd1_use = lambd1_values
+            lambd2_use = lambd2_values
         elif lambd_type == 'Fixed':
-            lambd_use = lambd_values[qs_int == this_q][0]
+            lambd1_use = lambd1_values[qs_int == this_q][0]
+            lambd2_use = lambd2_values[qs_int == this_q][0]
 
-        beta, yhat, this_lambd = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Below',
-                                                           yhat, spline_x, lambd_use)
+        beta, yhat, this_lambd1, this_lambd2 = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Below',
+                                                                         yhat, spline_x, lambd1_use, lambd2_use)
         BETA[:, qs_int == this_q] = beta[:, np.newaxis]
-        save_lambd[qs_int == this_q] = this_lambd
+        save_lambd1[qs_int == this_q] = this_lambd1
+        save_lambd2[qs_int == this_q] = this_lambd2
         dt = time.time() - t1
         print('Time elapsed: %0.2f seconds' % dt)
 
@@ -326,18 +318,21 @@ def fit_interaction_model(qs, lambd_values, lambd_type, X, data, spline_x):
         print('Fitting quantile %02d' % this_q)
         t1 = time.time()
         if lambd_type == 'Test':
-            lambd_use = lambd_values
+            lambd1_use = lambd1_values
+            lambd2_use = lambd2_values
         elif lambd_type == 'Fixed':
-            lambd_use = lambd_values[qs_int == this_q][0]
+            lambd1_use = lambd1_values[qs_int == this_q][0]
+            lambd2_use = lambd2_values[qs_int == this_q][0]
 
-        beta, yhat, this_lambd = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Above',
-                                                           yhat, spline_x, lambd_use)
+        beta, yhat, this_lambd1, this_lambd2 = fit_regularized_spline_QR(X, data, delta, this_q/100, 'Above',
+                                                                         yhat, spline_x, lambd1_use, lambd2_use)
         BETA[:, qs_int == this_q] = beta[:, np.newaxis]
-        save_lambd[qs_int == this_q] = this_lambd
+        save_lambd1[qs_int == this_q] = this_lambd1
+        save_lambd2[qs_int == this_q] = this_lambd2
         dt = time.time() - t1
         print('Time elapsed: %0.2f seconds' % dt)
 
-    return BETA, save_lambd
+    return BETA, save_lambd1, save_lambd2
 
 
 def fit_linear_QR(X, data, tau, constraint, q):
