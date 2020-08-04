@@ -6,7 +6,7 @@ from humidity_variability.utils import calc_BIC
 import time
 
 
-def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_values):
+def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_values, anoms=True):
     """Fit regularized spline regression to the data.
 
     The model is coded to be for:
@@ -33,6 +33,8 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
         The value of temperature not to be exceeded
     lambd_values : numpy.ndarray or float
         The initial set of lambda values to try, or a single lambda value to use
+    anoms : bool
+        If true, do not enforce noncrossing constraint
 
     Returns
     -------
@@ -43,7 +45,6 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
     best_lambda : float
         Selected value of lambda based on BIC.
     """
-
     N, K = X.shape
     lambd1 = cp.Parameter(nonneg=True)
     lambd2 = cp.Parameter(nonneg=True)
@@ -134,13 +135,17 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
         n_constraints = 0  # Median is far enough from the Td < T constraint that we don't need to add it
         G = G1
         del G1
-    elif constraint == 'Below':  # Need constraint with <= T AND above lower quantile
-        n_constraints = len(T) + len(q)
-        G2a = sparse.hstack((X, -X, sparse.rand(N, 2*N + 4*(N - 1), density=0)))
-        G2b = sparse.hstack((-X, X, sparse.rand(N, 2*N + 4*(N - 1), density=0)))
-        G2 = sparse.vstack((G2a, G2b))
-        del G2a, G2b
-        G = sparse.vstack((G1, G2))
+    elif constraint == 'Below':  # Constrain to be above lower quantile
+        if anoms:
+            n_constraints = len(q)
+            G2 = sparse.hstack((-X, X, sparse.rand(N, 2*N + 4*(N - 1), density=0)))
+            G = sparse.vstack((G1, G2))
+        else:  # additionally constrain to not cross T
+            G2a = sparse.hstack((X, -X, sparse.rand(N, 2*N + 4*(N - 1), density=0)))
+            G2b = sparse.hstack((-X, X, sparse.rand(N, 2*N + 4*(N - 1), density=0)))
+            G2 = sparse.vstack((G2a, G2b))
+            del G2a, G2b
+            G = sparse.vstack((G1, G2))
     elif constraint == 'Above':  # just constrain to be below upper quantiles
         n_constraints = len(q)
         G2 = sparse.hstack((X, -X, sparse.rand(N, 2*N + 4*(N - 1), density=0)))
@@ -153,9 +158,12 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
     # Right hand side of inequality constraint
     h = np.zeros((n + n_constraints, ))
     if constraint == 'Below':
-        c1 = len(T)
-        h[n:(n + c1)] = T
-        h[(n + c1):] = -q
+        if anoms:
+            h[n:] = -q
+        else:
+            c1 = len(T)
+            h[n:(n + c1)] = T
+            h[(n + c1):] = -q
     elif constraint == 'Above':
         h[n:] = q
 

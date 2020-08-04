@@ -161,7 +161,7 @@ def add_GMT(df, lowpass_freq=1/10, GMT_fname='/home/mckinnon/bucket/BEST/Land_an
     lowpass_freq : float
         Frequency (1/years) to use for Butterworth lowpass filter.
     GMT_fname : str
-        Full path and filename for location of BEST GMT
+        Full path and filename of BEST GMT (Land and ocean)
 
     Returns
     -------

@@ -10,10 +10,11 @@ import ctypes
 
 
 start_year = 1973
-end_year = 2018
+end_year = 2019
 expand_data = True  # should the start/end year be the edges of the data, or a minimum requirement?
 search_query = {'begin': 'datetime(%i, 1, 1)' % start_year,
-                'end': 'datetime(%i, 12, 31)' % end_year}
+                'end': 'datetime(%i, 12, 31)' % end_year,
+                'ctry': "'US'"}
 
 n_tries = 5  # Number of times to try (1) download and (2) save
 
