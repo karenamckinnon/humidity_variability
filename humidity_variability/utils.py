@@ -151,7 +151,7 @@ def get_peak_window(window_length, this_df, temperature_name, for_summer=1):
     return window_use
 
 
-def add_GMT(df, lowpass_freq=1/10):
+def add_GMT(df, lowpass_freq=1/10, GMT_fname='/home/mckinnon/bucket/BEST/Land_and_Ocean_complete.txt'):
     """Add a column to df containing the monthly global mean temperature anomaly (GMTA).
 
     Parameters
@@ -160,6 +160,8 @@ def add_GMT(df, lowpass_freq=1/10):
         Dataframe containing GSOD data. Must include standard date column.
     lowpass_freq : float
         Frequency (1/years) to use for Butterworth lowpass filter.
+    GMT_fname : str
+        Full path and filename of BEST GMT (Land and ocean)
 
     Returns
     -------
@@ -169,7 +171,6 @@ def add_GMT(df, lowpass_freq=1/10):
 
     # Textfile containing GMTA data
     # Can use a different source, but will need to be loaded differently
-    GMT_fname = '/home/mckinnon/bucket/BEST/Land_and_Ocean_complete.txt'
     gmt_data = pd.read_csv(GMT_fname, comment='%', header=None, delim_whitespace=True).loc[:, :2]
     gmt_data.columns = ['year', 'month', 'GMTA']
 
