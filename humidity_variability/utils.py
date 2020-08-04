@@ -1,9 +1,9 @@
 import numpy as np
 from datetime import datetime
 import pandas as pd
-import observational_large_ensemble.utils as olens_utils
 from numpy.linalg import multi_dot
 from helpful_utilities.meteo import F_to_C
+from helpful_utilities.general import lowpass_butter
 
 
 def jitter(ts, offset, spread):
@@ -179,7 +179,7 @@ def add_GMT(df, lowpass_freq=1/10, GMT_fname='/home/mckinnon/bucket/BEST/Land_an
     gmt_data = gmt_data.loc[:stop_idx, :]
 
     # Perform lowpass filtering
-    gmt_smooth = olens_utils.lowpass_butter(12, lowpass_freq, 3, gmt_data['GMTA'].values)
+    gmt_smooth = lowpass_butter(12, lowpass_freq, 3, gmt_data['GMTA'].values)
     gmt_data = gmt_data.assign(GMTA_lowpass=gmt_smooth)
 
     # Match dates between df and gmt_data
