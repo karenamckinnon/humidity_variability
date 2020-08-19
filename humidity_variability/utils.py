@@ -43,7 +43,10 @@ def add_date_columns(df):
     """
 
     # Create datetime column
-    df['dt'] = [datetime.strptime(d, '%Y-%m-%d') for d in df['date']]
+    if isinstance(df.loc[0, 'date'], str):
+        df['dt'] = [datetime.strptime(d, '%Y-%m-%d') for d in df['date']]
+    else:
+        df = df.rename(columns={'date': 'dt'})
 
     # Create month, year, season, and day of year columns
     df['month'] = [d.month for d in df['dt']]
