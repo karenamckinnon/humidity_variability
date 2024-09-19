@@ -3,7 +3,7 @@ from datetime import datetime
 import pandas as pd
 from numpy.linalg import multi_dot
 from helpful_utilities.meteo import F_to_C
-from helpful_utilities.general import lowpass_butter
+from helpful_utilities.stats import lowpass_butter
 
 
 def jitter(ts, offset, spread):
@@ -215,7 +215,7 @@ def solve_qr(X, data, tau, constraint, q=None):
     data : numpy.ndarray
         The data to be fit to
     tau : float
-        Quantile of interest \in (0, 1)
+        Quantile of interest in (0, 1)
     constraint : str
         Type of constraint to impose: 'None', 'Below', 'Above'.
         'Below' indicates no crossing of lower quantile (i.e. tau = 0.55 shouldn't cross tau = 0.5)
