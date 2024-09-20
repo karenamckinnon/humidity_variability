@@ -2,7 +2,7 @@
 humidity_variability
 ====================
 
-This repo contains code to fit the noncrossing smoothing splines quantile regression model in McKinnon and Poppick, under review in JABES.
+This repo contains code to fit the noncrossing smoothing splines quantile regression model in McKinnon and Poppick (JABES, https://link.springer.com/article/10.1007/s13253-020-00393-4)
 
 Code is research (not production) quality, and will likely need modifications to run on your machine. 
 
