@@ -1,6 +1,7 @@
 import numpy as np
 import cvxpy as cp
 from scipy import sparse
+from scipy.sparse import csr_matrix
 from cvxpy import SolverError
 from humidity_variability.utils import calc_BIC
 import time
@@ -21,7 +22,7 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
     delta : numpy.ndarray
         The dx for the regularized spline term(s)
     tau : float
-        Quantile of interest \in (0, 1)
+        Quantile of interest in (0, 1)
     constraint : str
         Type of constraint to impose: 'None', 'Below', 'Above'.
         'Below' indicates no crossing of lower quantile (i.e. tau = 0.55 shouldn't cross tau = 0.5)
@@ -49,41 +50,36 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
     lambd1 = cp.Parameter(nonneg=True)
     lambd2 = cp.Parameter(nonneg=True)
 
-    diag_vec = 1/delta
-    off_diag_1 = -1/delta[:-1] - 1/delta[1:]
-    off_diag_2 = 1/delta[1:]
+    main_diag = -2/(delta[:-1] * delta[1:]) # operates on f(x+h)
+    upper_diag = 2/(delta[1:] * (delta[:-1] + delta[1:])) # operates on f(x+2*h)
+    lower_diag = 2/(delta[:-1] * (delta[:-1] + delta[1:])) # operates on f(x)
 
-    diagonals = [diag_vec, off_diag_1, off_diag_2]
-    D0 = sparse.diags(diagonals, [0, 1, 2], shape=(N-2, N-1))
+    # pad with zeros such that first and last row are zeros (f''=0 assumed at edges)
+    main_diag = np.hstack((0, main_diag, 0))
+    upper_diag = np.hstack((0, upper_diag))
+    lower_diag = np.hstack((lower_diag, 0))
 
-    add_row = np.zeros((N-1, ))
-    add_row[-2] = 1/delta[-2]
-    add_row[-1] = -1/delta[-1] - 1/delta[-2]
+    # Construct the tridiagonal matrix
+    diagonals = [main_diag, upper_diag, lower_diag]
+    D0 = sparse.diags(diagonals, [0, 1, -1], shape=(N, N))
 
-    add_col = np.zeros((N-1, 1))
-    add_col[-2] = 1/delta[-1]
-    add_col[-1] = 1/delta[-1]
-
-    D0 = sparse.vstack((D0, add_row))
-    D0 = sparse.hstack((D0, add_col))
-
-    # Spline term 1
-    D1 = sparse.hstack((sparse.rand(N - 1, K - 2*N, density=0), D0, sparse.rand(N - 1, N, density=0)))
-    # Spline term 2
-    D2 = sparse.hstack((sparse.rand(N - 1, K - 2*N, density=0), sparse.rand(N - 1, N, density=0), D0))
+    # Second derivative for spline term 1 (N x K)
+    D1 = sparse.hstack((csr_matrix((N, K - 2*N)), D0, csr_matrix((N, N))))
+    # Second derivative for spline term 2 (N x K)
+    D2 = sparse.hstack((csr_matrix((N, K - N)), D0))
 
     # Cost function to be minized (c.T@z)
     # np.repeat(0, 2*K): no penalty on coefficients themselves
     # tau*np.repeat(1, N), (1-tau)*np.repeat(1, N): weight on positive and negative residuals
-    # lam*np.repeat(1, N-1): weight on positive and negative first and second derivatives
-    # size: 2*K + 2*N + 2*(N - 1)
+    # lam*np.repeat(1, N): weight on positive and negative first and second derivatives
+    # size: 2*K + 2*N + 2*N
     c = np.concatenate((np.repeat(0, 2*K),
                         tau*np.repeat(1, N),
                         (1-tau)*np.repeat(1, N)))
 
     c = cp.hstack((c,
-                   lambd1*np.repeat(1, 2*(N-1)),  # pos/neg second derivative of first spline term
-                   lambd2*np.repeat(1, 2*(N-1))))  # pos/neg second derivative of second spline term
+                   lambd1*np.repeat(1, 2*N),  # pos/neg second derivative of first spline term
+                   lambd2*np.repeat(1, 2*N)))  # pos/neg second derivative of second spline term
 
     # Equality constraint: Az = b
     # Constraint ensures that fitted quantile trend + residuals = predictand
@@ -91,39 +87,39 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
     A01 = -1*X  # covariates for negative values of the variable
     A02 = sparse.eye(N)  # Positive residuals
     A03 = -1*sparse.eye(N)  # Negative residuals
-    A04 = sparse.rand(N, N - 1, density=0)
-    A05 = sparse.rand(N, N - 1, density=0)
-    A06 = sparse.rand(N, N - 1, density=0)
-    A07 = sparse.rand(N, N - 1, density=0)
+    A04 = csr_matrix((N, N))
+    A05 = csr_matrix((N, N))
+    A06 = csr_matrix((N, N))
+    A07 = csr_matrix((N, N))
 
-    # Additional constraint: D1@z - u + v = 0
-    # Ensures that second derivative adds to u - v
+    # Additional constraint: D1@z - u+ + u- = 0
+    # Ensures that second derivative of first spline is the same as u
     A10 = D1
     A11 = -1*D1
-    A12 = sparse.rand(N - 1, N, density=0)
-    A13 = sparse.rand(N - 1, N, density=0)
-    A14 = -1*sparse.eye(N - 1)
-    A15 = sparse.eye(N - 1)
-    A16 = sparse.rand(N - 1, N - 1, density=0)
-    A17 = sparse.rand(N - 1, N - 1, density=0)
+    A12 = csr_matrix((N, N))
+    A13 = csr_matrix((N, N))
+    A14 = -1*sparse.eye(N)
+    A15 = sparse.eye(N)
+    A16 = csr_matrix((N, N))
+    A17 = csr_matrix((N, N))
 
-    # Additional constraint: D2@z - u + v = 0
-    # Ensures that second derivative adds to u - v
+    # Additional constraint: D2@z - v+ + v- = 0
+    # Ensures that second derivative of second spline is the same as v
     A20 = D2
     A21 = -1*D2
-    A22 = sparse.rand(N - 1, N, density=0)
-    A23 = sparse.rand(N - 1, N, density=0)
-    A24 = sparse.rand(N - 1, N - 1, density=0)
-    A25 = sparse.rand(N - 1, N - 1, density=0)
-    A26 = -1*sparse.eye(N - 1)
-    A27 = sparse.eye(N - 1)
+    A22 = csr_matrix((N, N))
+    A23 = csr_matrix((N, N))
+    A24 = csr_matrix((N, N))
+    A25 = csr_matrix((N, N))
+    A26 = -1*sparse.eye(N)
+    A27 = sparse.eye(N)
 
     A = sparse.vstack((sparse.hstack((A00, A01, A02, A03, A04, A05, A06, A07)),
                        sparse.hstack((A10, A11, A12, A13, A14, A15, A16, A17)),
                        sparse.hstack((A20, A21, A22, A23, A24, A25, A26, A27))))
 
     A = cp.Constant(A)
-    b = np.hstack((data.T, np.zeros(2*(N - 1))))
+    b = np.hstack((data.T, np.zeros(2*N)))
 
     # Determine if we have non-crossing constraints
     # Inequality constraints written Gx <= h
@@ -138,17 +134,17 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
     elif constraint == 'Below':  # Constrain to be above lower quantile
         if anoms:
             n_constraints = len(q)
-            G2 = sparse.hstack((-X, X, sparse.rand(N, 2*N + 4*(N - 1), density=0)))
+            G2 = sparse.hstack((-X, X, sparse.rand(N, 2*N + 4*N, density=0)))
             G = sparse.vstack((G1, G2))
         else:  # additionally constrain to not cross T
-            G2a = sparse.hstack((X, -X, sparse.rand(N, 2*N + 4*(N - 1), density=0)))
-            G2b = sparse.hstack((-X, X, sparse.rand(N, 2*N + 4*(N - 1), density=0)))
+            G2a = sparse.hstack((X, -X, sparse.rand(N, 2*N + 4*N, density=0)))
+            G2b = sparse.hstack((-X, X, sparse.rand(N, 2*N + 4*N, density=0)))
             G2 = sparse.vstack((G2a, G2b))
             del G2a, G2b
             G = sparse.vstack((G1, G2))
     elif constraint == 'Above':  # just constrain to be below upper quantiles
         n_constraints = len(q)
-        G2 = sparse.hstack((X, -X, sparse.rand(N, 2*N + 4*(N - 1), density=0)))
+        G2 = sparse.hstack((X, -X, sparse.rand(N, 2*N + 4*N, density=0)))
         G = sparse.vstack((G1, G2))
     else:
         raise NameError('Constraint must be Median, Above, or Below')
@@ -167,7 +163,7 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
     elif constraint == 'Above':
         h[n:] = q
 
-    z = cp.Variable(2*K + 2*N + 4*(N - 1))  # parameters + residuals + second derivatives (all pos + neg)
+    z = cp.Variable(2*K + 2*N + 4*N)  # parameters + residuals + second derivatives (all pos + neg)
     objective = cp.Minimize(c.T@z)
     prob = cp.Problem(objective,
                       [A@z == b, G@z <= h])
@@ -182,10 +178,12 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
         for ct_v, v in enumerate(lambd_values):
             lambd1.value = v
             lambd2.value = lambd2_scale*v
-
+            print(v)
             try:
-                prob.solve(solver=cp.ECOS, warm_start=True)
+                print('trying clarabel')
+                prob.solve(solver=cp.CLARABEL, warm_start=True)
             except SolverError:  # try a second solver
+                print('trying SCS')
                 prob.solve(solver=cp.SCS, warm_start=True)
             except SolverError:  # give up
                 print('Both ECOS and SCS failed.')
@@ -197,7 +195,7 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
             BIC[ct_v], df = calc_BIC(beta, yhat, data, tau, delta)
             if df > np.sqrt(len(data)):  # violating constraint of high dim BIC
                 BIC[ct_v] = 1e6  # something large
-
+                print('constraint violated for lam = %0.2f' % v)
         min_idx = np.argmin(BIC)
         new_idx = np.array([min_idx - 1, min_idx + 1])
         new_idx[new_idx < 0] = 0
@@ -205,6 +203,7 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
         new_range = lambd_values[new_idx]
         delta_range = new_range[1] - new_range[0]
         new_range = np.logspace(np.log10(new_range[0] + 0.1*delta_range), np.log10(new_range[1] - 0.1*delta_range), 6)
+        print(new_range)
         BIC = np.empty((len(new_range)))
         # df_save = np.empty((len(new_range)))
         for ct_v, v in enumerate(new_range):
@@ -358,7 +357,7 @@ def fit_linear_QR(X, data, tau, constraint, q):
     data : numpy.ndarray
         The 1D variable being modeled
     tau : float
-        Quantile of interest \in (0, 1)
+        Quantile of interest in (0, 1)
     constraint : str
         Type of constraint to impose: 'None', 'Below', 'Above'.
         'Below' indicates no crossing of lower quantile (i.e. tau = 0.55 shouldn't cross tau = 0.5)
