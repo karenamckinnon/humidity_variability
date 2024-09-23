@@ -49,20 +49,15 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
     lambd1 = cp.Parameter(nonneg=True)
     lambd2 = cp.Parameter(nonneg=True)
 
-    diag_vec = 1/delta
-    off_diag_1 = -1/delta[:-1] - 1/delta[1:]
-    off_diag_2 = 1/delta[1:]
+    main_diag = -2/(delta[:-1] * delta[1:]) # operates on f(x+h)
+    upper_diag = 2/(delta[1:] * (delta[:-1] + delta[1:])) # operates on f(x+2*h)
+    lower_diag = 2/(delta[:-1] * (delta[:-1] + delta[1:])) # operates on f(x)
 
-    diagonals = [diag_vec, off_diag_1, off_diag_2]
-    D0 = sparse.diags(diagonals, [0, 1, 2], shape=(N-2, N-1))
-
+    diagonals = [main_diag, upper_diag, lower_diag]
+    D0 = sparse.diags(diagonals, [1, 2, 0], shape=(N-2, N-1))
     add_row = np.zeros((N-1, ))
-    add_row[-2] = 1/delta[-2]
-    add_row[-1] = -1/delta[-1] - 1/delta[-2]
-
     add_col = np.zeros((N-1, 1))
-    add_col[-2] = 1/delta[-1]
-    add_col[-1] = 1/delta[-1]
+    add_col[-2] = 2/(delta[-1] * (delta[-2] + delta[-1]))
 
     D0 = sparse.vstack((D0, add_row))
     D0 = sparse.hstack((D0, add_col))
@@ -184,8 +179,13 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
             lambd2.value = lambd2_scale*v
 
             try:
+                print('using Clarabel')
+                prob.solve(solver=cp.CLARABEL, warm_start=True)
+            except SolverError:
+                print('using ECOS')
                 prob.solve(solver=cp.ECOS, warm_start=True)
             except SolverError:  # try a second solver
+                print('using SCS')
                 prob.solve(solver=cp.SCS, warm_start=True)
             except SolverError:  # give up
                 print('Both ECOS and SCS failed.')
@@ -211,8 +211,13 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
             lambd1.value = v
             lambd2.value = lambd2_scale*v
             try:
+                print('using Clarabel')
+                prob.solve(solver=cp.CLARABEL, warm_start=True)
+            except SolverError:
+                print('using ECOS')
                 prob.solve(solver=cp.ECOS, warm_start=True)
             except SolverError:  # try a second solver
+                print('using SCS')
                 prob.solve(solver=cp.SCS, warm_start=True)
             except SolverError:  # give up
                 print('Both ECOS and SCS failed.')
@@ -234,8 +239,13 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
     lambd2.value = lambd2_scale*best_lambda
 
     try:
+        print('using Clarabel')
+        prob.solve(solver=cp.CLARABEL, warm_start=True)
+    except SolverError:
+        print('using ECOS')
         prob.solve(solver=cp.ECOS, warm_start=True)
     except SolverError:  # try a second solver
+        print('using SCS')
         prob.solve(solver=cp.SCS, warm_start=True)
     except SolverError:  # give up
         print('Both ECOS and SCS failed.')
