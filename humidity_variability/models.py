@@ -179,17 +179,16 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
             lambd2.value = lambd2_scale*v
 
             try:
-                print('using Clarabel')
                 prob.solve(solver=cp.CLARABEL, warm_start=True)
             except SolverError:
-                print('using ECOS')
-                prob.solve(solver=cp.ECOS, warm_start=True)
-            except SolverError:  # try a second solver
-                print('using SCS')
-                prob.solve(solver=cp.SCS, warm_start=True)
-            except SolverError:  # give up
-                print('Both ECOS and SCS failed.')
-                return 0
+                try:
+                    prob.solve(solver=cp.ECOS, warm_start=True)
+                except SolverError:
+                    try:
+                        prob.solve(solver=cp.SCS, warm_start=True)
+                    except SolverError:  # give up
+                        print('Clarabel, ECOS, and SCS all failed.')
+                        return 0
 
             beta = np.array(z.value[0:K] - z.value[K:2*K])
             yhat = np.dot(X, beta)
@@ -211,17 +210,16 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
             lambd1.value = v
             lambd2.value = lambd2_scale*v
             try:
-                print('using Clarabel')
                 prob.solve(solver=cp.CLARABEL, warm_start=True)
             except SolverError:
-                print('using ECOS')
-                prob.solve(solver=cp.ECOS, warm_start=True)
-            except SolverError:  # try a second solver
-                print('using SCS')
-                prob.solve(solver=cp.SCS, warm_start=True)
-            except SolverError:  # give up
-                print('Both ECOS and SCS failed.')
-                return 0
+                try:
+                    prob.solve(solver=cp.ECOS, warm_start=True)
+                except SolverError:
+                    try:
+                        prob.solve(solver=cp.SCS, warm_start=True)
+                    except SolverError:  # give up
+                        print('Clarabel, ECOS, and SCS all failed.')
+                        return 0
 
             beta = np.array(z.value[0:K] - z.value[K:2*K])
             yhat = np.dot(X, beta)
@@ -237,19 +235,17 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
 
     lambd1.value = best_lambda
     lambd2.value = lambd2_scale*best_lambda
-
     try:
-        print('using Clarabel')
         prob.solve(solver=cp.CLARABEL, warm_start=True)
     except SolverError:
-        print('using ECOS')
-        prob.solve(solver=cp.ECOS, warm_start=True)
-    except SolverError:  # try a second solver
-        print('using SCS')
-        prob.solve(solver=cp.SCS, warm_start=True)
-    except SolverError:  # give up
-        print('Both ECOS and SCS failed.')
-        return 0
+        try:
+            prob.solve(solver=cp.ECOS, warm_start=True)
+        except SolverError:
+            try:
+                prob.solve(solver=cp.SCS, warm_start=True)
+            except SolverError:  # give up
+                print('Clarabel, ECOS, and SCS all failed.')
+                return 0
 
     beta = np.array(z.value[0:K] - z.value[K:2*K])
     yhat = np.dot(X, beta)
