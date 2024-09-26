@@ -405,7 +405,7 @@ def mod_legendre(q):
     return bases
 
 
-def calc_BIC(beta, yhat, data, tau, delta, thresh=1e-3):
+def calc_BIC(beta, yhat, data, tau, delta, thresh=1e-3, median_only=False):
     """Calculate high-dimensional BIC for a given value of lambda.
 
     Note that this script is _specific_ to the model used in McKinnon and Poppick, in prep.
@@ -427,6 +427,8 @@ def calc_BIC(beta, yhat, data, tau, delta, thresh=1e-3):
         The difference between sequential temperature values
     thresh : float
         Threshold of difference in slope at which point an active knot is identified
+    median_only : bool
+        Indicator of whether only the median quantile is being fit
 
     Returns
     -------
@@ -453,9 +455,11 @@ def calc_BIC(beta, yhat, data, tau, delta, thresh=1e-3):
 
     u = data - yhat
     rho = u*(tau - (u < 0).astype(float))
-
-    C_n = np.log(p)
-    BIC = np.log(np.mean(rho)) + df*np.log(N)/(2*N)*C_n
+    if median_only:
+        C_n = 1
+    else:
+        C_n = np.log(p)
+    BIC = np.log(np.sum(rho)) + df*np.log(N)/(2*N)*C_n
     return BIC, df
 
 
