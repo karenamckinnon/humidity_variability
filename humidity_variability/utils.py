@@ -405,7 +405,7 @@ def mod_legendre(q):
     return bases
 
 
-def calc_BIC(beta, yhat, data, tau, delta, thresh=1e-3, median_only=False):
+def calc_BIC(beta, yhat, data, tau, d2splines1, d2splines2, thresh=1e-2, median_only=False):
     """Calculate high-dimensional BIC for a given value of lambda.
 
     Note that this script is _specific_ to the model used in McKinnon and Poppick, in prep.
@@ -439,17 +439,9 @@ def calc_BIC(beta, yhat, data, tau, delta, thresh=1e-3, median_only=False):
 
     """
     N = len(data)
-
-    spline1 = beta[2:(2+N)]
-    slope = (spline1[1:] - spline1[:-1])/delta
-    # df is the number of "active" parameters
-    df = np.sum(np.abs(slope[1:] - slope[:-1]) > thresh) + 2  # changes in slope + end points
-
-    spline2 = beta[(2+N):]
-    slope = (spline2[1:] - spline2[:-1])/delta
-    df += np.sum(np.abs(slope[1:] - slope[:-1]) > thresh) + 2  # changes in slope + end points
-
-    df += 2  # intercept and slope
+    df1 = np.sum(np.abs(d2splines1) > thresh) + 2
+    df2 = np.sum(np.abs(d2splines2) > thresh) + 2
+    df = 2 + df1 + df2
 
     p = 2 + 2*N  # total number of potential parameters
 
