@@ -6,7 +6,7 @@ from humidity_variability.utils import calc_BIC
 import time
 
 
-def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_values, anoms=True):
+def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_values, anoms=True, median_only=False):
     """Fit regularized spline regression to the data.
 
     The model is coded to be for:
@@ -21,7 +21,7 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
     delta : numpy.ndarray
         The dx for the regularized spline term(s)
     tau : float
-        Quantile of interest \in (0, 1)
+        Quantile of interest in (0, 1)
     constraint : str
         Type of constraint to impose: 'None', 'Below', 'Above'.
         'Below' indicates no crossing of lower quantile (i.e. tau = 0.55 shouldn't cross tau = 0.5)
@@ -35,6 +35,8 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
         The initial set of lambda values to try, or a single lambda value to use
     anoms : bool
         If true, do not enforce noncrossing constraint
+    median_only : bool
+        Indicator of whether only the median quantile is being fit
 
     Returns
     -------
@@ -49,9 +51,9 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
     lambd1 = cp.Parameter(nonneg=True)
     lambd2 = cp.Parameter(nonneg=True)
 
-    main_diag = -2/(delta[:-1] * delta[1:]) # operates on f(x+h)
-    upper_diag = 2/(delta[1:] * (delta[:-1] + delta[1:])) # operates on f(x+2*h)
-    lower_diag = 2/(delta[:-1] * (delta[:-1] + delta[1:])) # operates on f(x)
+    main_diag = -2/(delta[:-1] * delta[1:])  # operates on f(x+h)
+    upper_diag = 2/(delta[1:] * (delta[:-1] + delta[1:]))  # operates on f(x+2*h)
+    lower_diag = 2/(delta[:-1] * (delta[:-1] + delta[1:]))  # operates on f(x)
 
     diagonals = [main_diag, upper_diag, lower_diag]
     D0 = sparse.diags(diagonals, [1, 2, 0], shape=(N-2, N-1))
@@ -167,86 +169,84 @@ def fit_regularized_spline_QR(X, data, delta, tau, constraint, q, T, lambd_value
     prob = cp.Problem(objective,
                       [A@z == b, G@z <= h])
 
-    lambd2_scale = 1
+    lambd2_scale = 0.5
     if (isinstance(lambd_values, float) | isinstance(lambd_values, int)):
         lambd1.value = lambd_values
         lambd2.value = lambd2_scale*lambd_values
         best_lambda = lambd_values
     else:
-        BIC = np.empty((len(lambd_values)))
+        BIC = 100*np.ones((len(lambd_values)))
         for ct_v, v in enumerate(lambd_values):
             lambd1.value = v
             lambd2.value = lambd2_scale*v
-
+            print('lambda=%0.3f' % v)
             try:
-                prob.solve(solver=cp.CLARABEL, warm_start=True)
-            except SolverError:
-                try:
-                    prob.solve(solver=cp.ECOS, warm_start=True)
-                except SolverError:
-                    try:
-                        prob.solve(solver=cp.SCS, warm_start=True)
-                    except SolverError:  # give up
-                        print('Clarabel, ECOS, and SCS all failed.')
-                        return 0
+                print('using ECOS')
+                prob.solve(solver=cp.ECOS, warm_start=False)
+            except SolverError:  # give up
+                print('solver failed')
+                continue
 
             beta = np.array(z.value[0:K] - z.value[K:2*K])
             yhat = np.dot(X, beta)
-
-            BIC[ct_v], df = calc_BIC(beta, yhat, data, tau, delta)
+            d2splines = z.value[(2*K + 2*N):]
+            d2splines1 = d2splines[:(N-1)] - d2splines[(N-1):(2*(N-1))]
+            d2splines2 = d2splines[(2*(N-1)):(3*(N-1))] - d2splines[(3*(N-1)):(4*(N-1))]
+            BIC[ct_v], df = calc_BIC(beta, yhat, data, tau, d2splines1, d2splines2, median_only=median_only)
+            print(BIC[ct_v])
             if df > np.sqrt(len(data)):  # violating constraint of high dim BIC
                 BIC[ct_v] = 1e6  # something large
-
-        min_idx = np.argmin(BIC)
-        new_idx = np.array([min_idx - 1, min_idx + 1])
-        new_idx[new_idx < 0] = 0
-        new_idx[new_idx > (len(BIC) - 1)] = (len(BIC) - 1)
-        new_range = lambd_values[new_idx]
-        delta_range = new_range[1] - new_range[0]
-        new_range = np.logspace(np.log10(new_range[0] + 0.1*delta_range), np.log10(new_range[1] - 0.1*delta_range), 6)
-        BIC = np.empty((len(new_range)))
-        # df_save = np.empty((len(new_range)))
-        for ct_v, v in enumerate(new_range):
-            lambd1.value = v
-            lambd2.value = lambd2_scale*v
-            try:
-                prob.solve(solver=cp.CLARABEL, warm_start=True)
-            except SolverError:
-                try:
-                    prob.solve(solver=cp.ECOS, warm_start=True)
-                except SolverError:
-                    try:
-                        prob.solve(solver=cp.SCS, warm_start=True)
-                    except SolverError:  # give up
-                        print('Clarabel, ECOS, and SCS all failed.')
-                        return 0
-
-            beta = np.array(z.value[0:K] - z.value[K:2*K])
-            yhat = np.dot(X, beta)
-
-            BIC[ct_v], df = calc_BIC(beta, yhat, data, tau, delta)
-            if df > np.sqrt(len(data)):  # violating constraint of high dim BIC
-                BIC[ct_v] = 1e6  # something large
-
-            # df_save[ct_v] = df
-
-        # df_final = df_save[np.argmin(BIC)]
-        best_lambda = new_range[np.argmin(BIC)]
+            np.save('test%01i.npy' % ct_v, z.value)
+        best_lambda = lambd_values[np.argmin(BIC)]
+        print('best lambda: %0.3f' % best_lambda)
+#
+#        min_idx = np.argmin(BIC)
+#        new_idx = np.array([min_idx - 1, min_idx + 1])
+#        new_idx[new_idx < 0] = 0
+#        new_idx[new_idx > (len(BIC) - 1)] = (len(BIC) - 1)
+#        new_range = lambd_values[new_idx]
+#        delta_range = new_range[1] - new_range[0]
+#        new_range = np.linspace(new_range[0] + 0.1*delta_range, new_range[1] - 0.1*delta_range, 5)
+#        BIC = 100*np.ones((len(new_range)))
+#        # df_save = np.empty((len(new_range)))
+#        for ct_v, v in enumerate(new_range):
+#            lambd1.value = v
+#            lambd2.value = lambd2_scale*v
+#            print('lambda=%0.3f' % v)
+#            try:
+#                prob.solve(solver=cp.CLARABEL, warm_start=True)
+#            except SolverError:
+#                print('solver failed')
+#                continue
+#            except SolverError:
+#                try:
+#                    prob.solve(solver=cp.ECOS, warm_start=True)
+#                except SolverError:
+#                    try:
+#                        prob.solve(solver=cp.SCS, warm_start=True)
+#                    except SolverError:  # give up
+#                        print('Clarabel, ECOS, and SCS all failed.')
+#                        return 0
+#
+#            beta = np.array(z.value[0:K] - z.value[K:2*K])
+#            yhat = np.dot(X, beta)
+#
+#            BIC[ct_v], df = calc_BIC(beta, yhat, data, tau, delta, median_only=median_only)
+#            if df > np.sqrt(len(data)):  # violating constraint of high dim BIC
+#                BIC[ct_v] = 1e6  # something large
+#
+#            # df_save[ct_v] = df
+#
+#        # df_final = df_save[np.argmin(BIC)]
+#        best_lambda = new_range[np.argmin(BIC)]
 
     lambd1.value = best_lambda
     lambd2.value = lambd2_scale*best_lambda
     try:
-        prob.solve(solver=cp.CLARABEL, warm_start=True)
+        print('using ECOS')
+        prob.solve(solver=cp.ECOS, warm_start=False)
     except SolverError:
-        try:
-            prob.solve(solver=cp.ECOS, warm_start=True)
-        except SolverError:
-            try:
-                prob.solve(solver=cp.SCS, warm_start=True)
-            except SolverError:  # give up
-                print('Clarabel, ECOS, and SCS all failed.')
-                return 0
-
+        return 0
     beta = np.array(z.value[0:K] - z.value[K:2*K])
     yhat = np.dot(X, beta)
 
@@ -292,7 +292,11 @@ def fit_interaction_model(qs, lambd_values, lambd_type, X, data, spline_x):
     # Start with the desired quantile closest to the median
     start_q = qs_int[np.argmin(np.abs(qs_int - 50))]
     delta_q = qs_int - start_q
-
+    if (len(qs_int) == 1) & (start_q == 50):
+        median_only = True
+    else:
+        median_only = False
+    print(median_only)
     pos_q = qs_int[delta_q > 0]
     neg_q = qs_int[delta_q < 0]
 
@@ -311,7 +315,7 @@ def fit_interaction_model(qs, lambd_values, lambd_type, X, data, spline_x):
         lambd_use = lambd_values[qs_int == start_q][0]
 
     beta50, yhat50, this_lambd = fit_regularized_spline_QR(X, data, delta, start_q/100, 'Median',
-                                                           None, spline_x, lambd_use)
+                                                           None, spline_x, lambd_use, median_only=median_only)
     BETA[:, qs_int == start_q] = beta50[:, np.newaxis]
     save_lambd[qs_int == start_q] = this_lambd
     dt = time.time() - t1
@@ -320,6 +324,7 @@ def fit_interaction_model(qs, lambd_values, lambd_type, X, data, spline_x):
     # Fit quantiles above the middle
     yhat = yhat50
     for this_q in pos_q:
+        print('oh no!')
         print('Fitting quantile %02d' % this_q)
         t1 = time.time()
         if lambd_type == 'Test':
@@ -364,7 +369,7 @@ def fit_linear_QR(X, data, tau, constraint, q):
     data : numpy.ndarray
         The 1D variable being modeled
     tau : float
-        Quantile of interest \in (0, 1)
+        Quantile of interest in (0, 1)
     constraint : str
         Type of constraint to impose: 'None', 'Below', 'Above'.
         'Below' indicates no crossing of lower quantile (i.e. tau = 0.55 shouldn't cross tau = 0.5)
